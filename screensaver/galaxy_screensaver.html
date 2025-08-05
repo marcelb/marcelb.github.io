@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OLED Galaxy Screensaver</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            cursor: none;
+        }
+        canvas {
+            display: block;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="galaxyCanvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('galaxyCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        class Star {
+            constructor(galaxyX, galaxyY, distance, angle, color, brightness = 1) {
+                this.galaxyX = galaxyX;
+                this.galaxyY = galaxyY;
+                this.distance = distance;
+                this.originalDistance = distance;
+                this.originalAngle = angle;
+                this.angle = angle;
+                this.angularSpeed = 0.16 / Math.sqrt(distance);
+                this.color = color;
+                this.brightness = brightness;
+                this.size = Math.random() * 1.6 + 0.4;
+                this.mass = this.size * 1.0;
+                
+                // Recovery tracking
+                this.isRecovering = false;
+                this.recoveryStartTime = 0;
+                this.disturbedDistance = distance;
+                this.disturbedAngle = angle;
+                
+                this.updatePosition();
+            }
+            
+            updatePosition() {
+                this.x = this.galaxyX + Math.cos(this.angle) * this.distance;
+                this.y = this.galaxyY + Math.sin(this.angle) * this.distance;
+                
+                this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
+                this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
+            }
+            
+            update(newGalaxyX, newGalaxyY, otherGalaxies = [], wanderers = []) {
+                this.galaxyX = newGalaxyX;
+                this.galaxyY = newGalaxyY;
+                
+                // Update orbital motion
+                this.angle += this.angularSpeed;
+                
+                // Calculate base orbital position
+                const baseX = Math.cos(this.angle) * this.distance;
+                const baseY = Math.sin(this.angle) * this.distance;
+                
+                let totalForceX = 0;
+                let totalForceY = 0;
+                
+                const currentX = this.galaxyX + baseX;
+                const currentY = this.galaxyY + baseY;
+                
+                // Gravitational interactions with other galaxies
+                for (let i = 0; i < otherGalaxies.length; i++) {
+                    const otherGalaxy = otherGalaxies[i];
+                    const galaxyDx = otherGalaxy.x - this.galaxyX;
+                    const galaxyDy = otherGalaxy.y - this.galaxyY;
+                    const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
+                    
+                    if (galaxyDistSq < 360000) { // 600px range for galaxy check
+                        // Interact with center star (strongest gravitational source)
+                        const centerDx = otherGalaxy.centerStar.x - currentX;
+                        const centerDy = otherGalaxy.centerStar.y - currentY;
+                        const centerDistSq = centerDx * centerDx + centerDy * centerDy;
+                        
+                        if (centerDistSq > 100 && centerDistSq < 360000) { // 600px range
+                            const centerDistance = Math.sqrt(centerDistSq);
+                            const centerForce = (this.mass * 12.5) / (centerDistSq + 50);
+                            const clampedForce = Math.min(centerForce, 0.1);
+                            
+                            totalForceX += (centerDx / centerDistance) * clampedForce;
+                            totalForceY += (centerDy / centerDistance) * clampedForce;
+                        }
+                        
+                        // Interact with individual stars from other galaxy
+                        for (let j = 0; j < otherGalaxy.stars.length; j += 2) { // Every 2nd star for better interaction
+                            const otherStar = otherGalaxy.stars[j];
+                            const dx = otherStar.x - currentX;
+                            const dy = otherStar.y - currentY;
+                            const distSq = dx * dx + dy * dy;
+                            
+                            if (distSq > 50 && distSq < 160000) { // 400px range
+                                const distance = Math.sqrt(distSq);
+                                const force = (this.mass * otherStar.mass * 3.0) / (distSq + 100);
+                                const clampedForce = Math.min(force, 0.06);
+                                
+                                totalForceX += (dx / distance) * clampedForce;
+                                totalForceY += (dy / distance) * clampedForce;
+                            }
+                        }
+                    }
+                }
+                
+                // Apply gravitational forces to modify position (tidal effects)
+                const forceMultiplier = 20;
+                const gravitationalX = totalForceX * forceMultiplier;
+                const gravitationalY = totalForceY * forceMultiplier;
+                
+                // Calculate actual position with gravitational displacement
+                this.x = this.galaxyX + baseX + gravitationalX;
+                this.y = this.galaxyY + baseY + gravitationalY;
+                
+                // Modify orbital parameters based on gravitational influence
+                const forceStrength = Math.sqrt(totalForceX * totalForceX + totalForceY * totalForceY);
+                
+                // Orbital velocity changes due to gravitational perturbation
+                if (forceStrength > 0.001) {
+                    // Gravitational forces can speed up or slow down orbital motion
+                    const forceAngle = Math.atan2(totalForceY, totalForceX);
+                    const currentAngle = Math.atan2(baseY, baseX);
+                    const angleDiff = forceAngle - currentAngle;
+                    
+                    // Tangential component affects orbital speed
+                    const tangentialComponent = Math.sin(angleDiff) * forceStrength;
+                    this.angularSpeed += tangentialComponent * 0.0005; // Modify orbital velocity
+                    
+                    // Radial component affects orbital distance
+                    const radialComponent = Math.cos(angleDiff) * forceStrength;
+                    this.distance += radialComponent * 7.5; // Tidal stretching/compression
+                }
+                
+                // Recovery system - check if isolated
+                let hasNearbyGalaxy = false;
+                for (let i = 0; i < otherGalaxies.length; i++) {
+                    const otherGalaxy = otherGalaxies[i];
+                    const galaxyDx = otherGalaxy.x - this.galaxyX;
+                    const galaxyDy = otherGalaxy.y - this.galaxyY;
+                    const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
+                    if (galaxyDistSq < 360000) { // 600px isolation threshold
+                        hasNearbyGalaxy = true;
+                        break;
+                    }
+                }
+                
+                if (!hasNearbyGalaxy && forceStrength < 0.001) {
+                    // Gradual recovery to original orbital parameters
+                    const recoveryRate = 0.006;
+                    const distanceDiff = this.originalDistance - this.distance;
+                    const angleDiff = this.originalAngle - this.angle;
+                    const speedDiff = (0.16 / Math.sqrt(this.originalDistance)) - this.angularSpeed;
+                    
+                    this.distance += distanceDiff * recoveryRate;
+                    this.angularSpeed += speedDiff * recoveryRate * 0.1;
+                }
+                
+                // Bounds enforcement
+                this.distance = Math.max(3, Math.min(this.distance, 400));
+                this.angularSpeed = Math.max(-0.05, Math.min(this.angularSpeed, 0.05));
+                
+                this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
+                this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.brightness;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = this.size * 2;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Galaxy {
+            constructor(x, y, baseHue) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2.0;
+                this.vy = (Math.random() - 0.5) * 2.0;
+                this.baseHue = baseHue;
+                this.color = this.hslToHex(baseHue, 70, 60);
+                this.stars = [];
+                
+                const centerColor = this.hslToHex(baseHue, 80, 80);
+                this.centerStar = new Star(x, y, 0, 0, centerColor, 1);
+                this.centerStar.size = 3.0;
+                this.centerStar.mass = 5.0;
+                
+                for (let i = 0; i < 240; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const centerWeight = Math.pow(Math.random(), 2.5);
+                    const distance = 8 + centerWeight * 140; // Larger galaxy size
+                    const angleVariation = (Math.random() - 0.5) * 0.5;
+                    const distanceVariation = (Math.random() - 0.5) * 10;
+                    const finalAngle = angle + angleVariation;
+                    const finalDistance = Math.max(5, distance + distanceVariation);
+                    
+                    const brightness = Math.max(0.2, 0.9 - (finalDistance / 150)); // Adjust for larger size
+                    
+                    const hueVariation = (Math.random() - 0.5) * 60;
+                    const starHue = (baseHue + hueVariation + 360) % 360;
+                    const saturationVariation = 50 + Math.random() * 40;
+                    const lightnessVariation = 40 + Math.random() * 30;
+                    const starColor = this.hslToHex(starHue, saturationVariation, lightnessVariation);
+                    
+                    const star = new Star(x, y, finalDistance, finalAngle, starColor, brightness);
+                    this.stars.push(star);
+                }
+            }
+            
+            hslToHex(h, s, l) {
+                l /= 100;
+                const a = s * Math.min(l, 1 - l) / 100;
+                const f = n => {
+                    const k = (n + h / 30) % 12;
+                    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                    return Math.round(255 * color).toString(16).padStart(2, '0');
+                };
+                return `#${f(0)}${f(8)}${f(4)}`;
+            }
+            
+            update(otherGalaxies = [], wanderers = []) {
+                // Add slight repulsion between galaxy centers
+                let repulsionX = 0;
+                let repulsionY = 0;
+                
+                for (let i = 0; i < otherGalaxies.length; i++) {
+                    const otherGalaxy = otherGalaxies[i];
+                    const dx = this.x - otherGalaxy.x; // Direction away from other galaxy
+                    const dy = this.y - otherGalaxy.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq > 0 && distSq < 360000) { // 600px repulsion range
+                        const distance = Math.sqrt(distSq);
+                        const repulsion = 200 / (distSq + 100); // Even weaker repulsive force (1/4 of original)
+                        const maxRepulsion = 0.00075; // Much more subtle (1/4 of original)
+                        const clampedRepulsion = Math.min(repulsion, maxRepulsion);
+                        
+                        repulsionX += (dx / distance) * clampedRepulsion;
+                        repulsionY += (dy / distance) * clampedRepulsion;
+                    }
+                }
+                
+                // Apply repulsion to velocity (gradual course change)
+                this.vx += repulsionX;
+                this.vy += repulsionY;
+                
+                // Limit maximum velocity to prevent runaway
+                const maxVelocity = 2.5;
+                const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (currentSpeed > maxVelocity) {
+                    this.vx = (this.vx / currentSpeed) * maxVelocity;
+                    this.vy = (this.vy / currentSpeed) * maxVelocity;
+                }
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
+                this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
+                
+                this.centerStar.update(this.x, this.y, otherGalaxies, wanderers);
+                
+                for (let i = 0; i < this.stars.length; i++) {
+                    this.stars[i].update(this.x, this.y, otherGalaxies, wanderers);
+                }
+            }
+            
+            draw() {
+                this.centerStar.draw();
+                for (let i = 0; i < this.stars.length; i++) {
+                    this.stars[i].draw();
+                }
+            }
+        }
+
+        const baseHues = [0, 72, 144, 216, 288];
+        const galaxies = [];
+        const wandererStars = [];
+        
+        for (let i = 0; i < 5; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const baseHue = baseHues[i];
+            galaxies.push(new Galaxy(x, y, baseHue));
+        }
+        
+        // Create wandering stars
+        class WandererStar {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4;
+                this.color = '#888888'; // Brighter gray
+                this.brightness = Math.random() * 0.4 + 0.3; // Much brighter: 0.3-0.7
+                this.size = Math.random() * 1.2 + 0.8; // Larger: 0.8-2.0
+                this.mass = this.size * 0.3;
+            }
+            
+            update(galaxies) {
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Interact with all galaxy stars and centers
+                let totalForceX = 0;
+                let totalForceY = 0;
+                
+                for (let i = 0; i < galaxies.length; i++) {
+                    const galaxy = galaxies[i];
+                    const galaxyDx = galaxy.x - this.x;
+                    const galaxyDy = galaxy.y - this.y;
+                    const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
+                    
+                    // Only interact if galaxy is nearby
+                    if (galaxyDistSq < 250000) { // 500px range
+                        // Interact with galaxy center star (strongest pull)
+                        const centerDx = galaxy.centerStar.x - this.x;
+                        const centerDy = galaxy.centerStar.y - this.y;
+                        const centerDistSq = centerDx * centerDx + centerDy * centerDy;
+                        
+                        if (centerDistSq > 100 && centerDistSq < 250000) {
+                            const centerDistance = Math.sqrt(centerDistSq);
+                            const centerForce = (this.mass * 5.0) / (centerDistSq + 25);
+                            const clampedCenterForce = Math.min(centerForce, 0.02);
+                            
+                            totalForceX += (centerDx / centerDistance) * clampedCenterForce;
+                            totalForceY += (centerDy / centerDistance) * clampedCenterForce;
+                        }
+                        
+                        // Interact with individual stars (every 3rd star for performance)
+                        for (let j = 0; j < galaxy.stars.length; j += 3) {
+                            const star = galaxy.stars[j];
+                            const dx = star.x - this.x;
+                            const dy = star.y - this.y;
+                            const distSq = dx * dx + dy * dy;
+                            
+                            if (distSq > 25 && distSq < 160000) { // 400px range
+                                const distance = Math.sqrt(distSq);
+                                const force = (this.mass * star.mass * 1.0) / (distSq + 25);
+                                const clampedForce = Math.min(force, 0.015);
+                                
+                                totalForceX += (dx / distance) * clampedForce;
+                                totalForceY += (dy / distance) * clampedForce;
+                            }
+                        }
+                    }
+                }
+                
+                // Apply gravitational forces (stronger effect)
+                this.x += totalForceX * 5;
+                this.y += totalForceY * 5;
+                
+                this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
+                this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.brightness;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = this.size * 2;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        
+        for (let i = 0; i < 60; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            wandererStars.push(new WandererStar(x, y));
+        }
+
+        function animate() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            for (let i = 0; i < galaxies.length; i++) {
+                const galaxy = galaxies[i];
+                const otherGalaxies = galaxies.filter((_, index) => index !== i);
+                galaxy.update(otherGalaxies, wandererStars);
+                galaxy.draw();
+            }
+            
+            // Update and draw wandering stars
+            for (let i = 0; i < wandererStars.length; i++) {
+                wandererStars[i].update(galaxies);
+                wandererStars[i].draw();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.key === ' ') {
+                window.close();
+            }
+        });
+        
+        let mouseTimeout;
+        document.addEventListener('mousemove', () => {
+            document.body.style.cursor = 'default';
+            clearTimeout(mouseTimeout);
+            mouseTimeout = setTimeout(() => {
+                document.body.style.cursor = 'none';
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
