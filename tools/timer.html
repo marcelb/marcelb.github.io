@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timer</title>
+  <style>
+    :root {
+      --bg: #0b0f14; --panel: #121820; --text: #e6edf3; --muted: #9aa7b2;
+      --accent: #47a3ff; --accent-2: #18c3b9; --danger: #ff5470; --radius: 16px;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
+      background: radial-gradient(1200px 800px at 70% -10%, #132033 0, transparent 70%), var(--bg);
+      color: var(--text); display: grid; place-items: center;
+    }
+    .app {
+      width: min(720px, 92vw);
+      background: linear-gradient(180deg, #15202b 0%, #0f151d 100%);
+      border: 1px solid #1f2b36; border-radius: var(--radius);
+      box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+      padding: 20px clamp(16px, 3vw, 32px) 28px;
+    }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+    h1 { font-size: clamp(18px, 2.2vw, 22px); margin: 0; letter-spacing: .3px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .time-display {
+      font-variant-numeric: tabular-nums; letter-spacing: 2px;
+      font-size: clamp(40px, 8vw, 92px);
+      text-align: center; margin: 8px 0 6px; line-height: 1.05; outline: none;
+    }
+    .time-display[contenteditable="true"] { cursor: text; }
+    .subline { text-align:center; color: var(--muted); margin: 0 0 16px; font-size: 12px; }
+
+    .buttons { display:flex; flex-wrap: wrap; gap: 10px; justify-content:center; margin: 16px 0 6px; }
+    button {
+      appearance: none; border: 1px solid transparent; border-radius: 999px;
+      padding: 10px 18px; font-size: 15px; cursor: pointer; color: #0b1117;
+      background: var(--accent); transition: transform .08s ease, box-shadow .2s ease, opacity .2s ease;
+      box-shadow: 0 6px 18px rgba(71,163,255,.25);
+    }
+    button.secondary { background: #1c2631; color: var(--text); border-color:#273444; box-shadow:none; }
+    button.ghost { background: transparent; color: var(--muted); border-color:#273444; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    button:active { transform: translateY(1px); }
+
+    .quick { display:flex; flex-wrap:wrap; gap: 8px; justify-content:center; margin: 10px 0 2px; }
+    .quick button { background: #18222d; color: var(--text); border-color:#273444; padding: 6px 10px; font-size: 13px; }
+
+    .progress-wrap { margin: 14px 0 4px; }
+    progress {
+      width: 100%; height: 14px; border-radius: 999px; overflow: hidden;
+      appearance: none; -webkit-appearance: none; background: #0f151d; border: 1px solid #273444;
+    }
+    progress::-webkit-progress-bar { background:#0f151d; }
+    progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%); }
+    progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+    .footer { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top: 10px; }
+    .hint { color: var(--muted); font-size: 12px; }
+
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Countdown timer">
+    <header>
+      <h1>⏱️ Countdown Timer</h1>
+      <div class="muted">Space: start/pause · R: reset</div>
+    </header>
+
+    <!-- Editable main display only -->
+    <div id="display" class="time-display" aria-live="polite" aria-atomic="true"
+         contenteditable="true" role="textbox" aria-label="Time" title="Type time (hh:mm:ss)">00:05:00</div>
+    <p class="subline" id="statusText">Ready</p>
+
+    <div class="buttons">
+      <button id="startBtn" type="button" title="Start">Start</button>
+      <button id="pauseBtn" class="secondary" type="button" title="Pause (Space)" disabled>Pause</button>
+      <button id="resetBtn" class="ghost" type="button" title="Reset (R)" disabled>Reset</button>
+      <button id="addMinBtn" class="secondary" type="button" title="+1 minute" disabled>+1 min</button>
+    </div>
+
+    <div class="quick" aria-label="Quick picks">
+      <button type="button" data-pick="00:00:30" title="30 seconds">30s</button>
+      <button type="button" data-pick="00:01:00" title="1 minute">1m</button>
+      <button type="button" data-pick="00:05:00" title="5 minutes">5m</button>
+      <button type="button" data-pick="00:10:00" title="10 minutes">10m</button>
+      <button type="button" data-pick="00:25:00" title="Pomodoro">25m</button>
+    </div>
+
+    <div class="progress-wrap">
+      <progress id="bar" value="0" max="1" aria-label="Time progress"></progress>
+    </div>
+
+    <div class="footer">
+      <span class="hint">Chime plays on finish. Desktop notifications are optional.</span>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="notifBtn" class="ghost" type="button" title="Enable desktop notifications">🔔 Notifications</button>
+        <label class="muted"><input type="checkbox" id="loopChk"> Repeat</label>
+      </div>
+    </div>
+
+    <div id="liveDone" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+  </div>
+
+  <script>
+  (function(){
+    const display   = document.getElementById('display');
+    const statusTxt = document.getElementById('statusText');
+    const bar       = /** @type {HTMLProgressElement} */(document.getElementById('bar'));
+    const startBtn  = document.getElementById('startBtn');
+    const pauseBtn  = document.getElementById('pauseBtn');
+    const resetBtn  = document.getElementById('resetBtn');
+    const addMinBtn = document.getElementById('addMinBtn');
+    const loopChk   = /** @type {HTMLInputElement} */(document.getElementById('loopChk'));
+    const notifBtn  = document.getElementById('notifBtn');
+    const quick     = document.querySelector('.quick');
+
+    /** @type {number|null} */ let timerId = null;
+    let totalMs = 0, endAt = 0, remaining = 0;
+    let running = false, paused = false;
+
+    // Snapshot for reset
+    let initialMs = 0;
+    let initialText = "00:05:00";
+
+    // ---------- Helpers ----------
+    function clamp(n,a,b){ n = Number.isFinite(+n) ? +n : a; return Math.min(b, Math.max(a, n)); }
+    function digitsOnly(str){ return (str||'').replace(/\D/g,''); }
+    function formatDigits(ds){
+      const d = digitsOnly(ds).slice(0,6);
+      const p = d.padStart(6,'0');
+      return `${p.slice(0,2)}:${p.slice(2,4)}:${p.slice(4,6)}`;
+    }
+    function parseDisplayToMs(){
+      const t = (display.textContent||'').trim();
+      let h=0,m=0,s=0;
+      if (t.includes(':')){
+        const parts = t.split(':').map(x=>parseInt(x||'0',10));
+        if (parts.length === 3){ [h,m,s] = parts; }
+        else if (parts.length === 2){ [m,s] = parts; }
+        else if (parts.length === 1){ [s] = parts; }
+      } else {
+        const p = digitsOnly(t).padStart(6,'0');
+        h = parseInt(p.slice(0,2),10);
+        m = parseInt(p.slice(2,4),10);
+        s = parseInt(p.slice(4,6),10);
+      }
+      h = clamp(h,0,99); m = clamp(m,0,59); s = clamp(s,0,59);
+      return (((h*60)+m)*60 + s)*1000;
+    }
+    function setDisplayFromMs(ms){
+      ms = Math.max(0, Math.floor(ms));
+      const sec = Math.floor(ms/1000);
+      const hrs = Math.floor(sec/3600);
+      const mins = Math.floor((sec%3600)/60);
+      const secs = sec%60;
+      const txt = [hrs, mins, secs].map(v=>String(v).padStart(2,'0')).join(':');
+      display.textContent = txt;
+      document.title = `${txt} – Timer`;
+    }
+    function normalizeDisplay(){
+      const fmt = formatDigits(display.textContent||'');
+      display.textContent = fmt;
+      document.title = `${fmt} – Timer`;
+      try { localStorage.setItem('timer:lastDigits', digitsOnly(fmt)); } catch {}
+      updateResetEnabled();
+    }
+    function updateResetEnabled(){
+      const ms = parseDisplayToMs();
+      const enable = running || paused || ms > 0 || Number(bar.value) > 0 || initialMs > 0;
+      resetBtn.disabled = !enable;
+      if (enable){ resetBtn.classList.remove('ghost'); resetBtn.classList.add('secondary'); }
+      else { resetBtn.classList.remove('secondary'); resetBtn.classList.add('ghost'); }
+    }
+    function setRunningUI(on){
+      startBtn.disabled = on;
+      pauseBtn.disabled = !on;
+      addMinBtn.disabled = !on;
+      display.setAttribute('contenteditable', on ? 'false' : 'true');
+      updateResetEnabled();
+    }
+
+    // ---------- Timer core ----------
+    function tick(){
+      if (!running || paused) return;
+      const now = Date.now();
+      remaining = Math.max(0, endAt - now);
+      setDisplayFromMs(remaining);
+      bar.value = totalMs > 0 ? (totalMs - remaining) / totalMs : 0;
+      if (remaining <= 0){
+        stopTimer(false);
+        onDone();
+      }
+    }
+
+    function startTimer(){
+      // snapshot initial value
+      normalizeDisplay();
+      initialText = display.textContent || "00:00:00";
+      initialMs = parseDisplayToMs();
+
+      totalMs = initialMs;
+      if (totalMs <= 0){
+        statusTxt.textContent = 'Please set a duration first.';
+        return;
+      }
+      running = true; paused = false;
+      endAt = Date.now() + totalMs;
+      bar.max = 1; bar.value = 0;
+      setRunningUI(true);
+      statusTxt.textContent = 'Running…';
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(tick, 200);
+      tick();
+    }
+
+    function pauseTimer(){
+      if (!running || paused) return;
+      paused = true;
+      if (timerId) { clearInterval(timerId); timerId = null; }
+      remaining = Math.max(0, endAt - Date.now());
+      statusTxt.textContent = 'Paused';
+      pauseBtn.textContent = 'Resume';
+      pauseBtn.title = 'Resume (Space)';
+      updateResetEnabled();
+    }
+
+    function resumeTimer(){
+      if (!running || !paused) return;
+      paused = false;
+      endAt = Date.now() + remaining;
+      statusTxt.textContent = 'Running…';
+      pauseBtn.textContent = 'Pause';
+      pauseBtn.title = 'Pause (Space)';
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(tick, 200);
+      tick();
+    }
+
+    function stopTimer(userCanceled){
+      running = false; paused = false;
+      if (timerId) { clearInterval(timerId); timerId = null; }
+      setRunningUI(false);
+      pauseBtn.textContent = 'Pause';
+      pauseBtn.title = 'Pause (Space)';
+      if (userCanceled) statusTxt.textContent = 'Stopped';
+    }
+
+    function resetTimer(){
+      // restore exact original start value
+      stopTimer(true);
+      totalMs = remaining = 0; endAt = 0;
+      if (initialMs > 0){
+        display.textContent = initialText;
+        document.title = `${initialText} – Timer`;
+      }
+      bar.value = 0;
+      updateResetEnabled();
+    }
+
+    function addMinute(){
+      if (!running || paused) return;
+      const extra = 60_000;
+      totalMs += extra;
+      endAt += extra;
+      tick();
+    }
+
+    function onDone(){
+      statusTxt.textContent = "Time's up!";
+      document.getElementById('liveDone').textContent = "Time's up!";
+      setDisplayFromMs(0);
+      bar.value = 1;
+      ringChime();
+      if ('Notification' in window && Notification.permission === 'granted'){
+        try { new Notification("⏰ Time's up!", { body: 'Timer finished.', silent: true }); } catch {}
+      }
+      if (loopChk.checked){ startTimer(); }
+      else { startBtn.focus({preventScroll:true}); updateResetEnabled(); }
+    }
+
+    // ---------- Chime ----------
+    function ringChime(){
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const seq = [880, 988, 1046]; const now = ctx.currentTime;
+        seq.forEach((freq, i)=> beep(ctx, now + i*0.25, freq, 0.18));
+        setTimeout(()=> ctx.close().catch(()=>{}), 1500);
+      } catch {}
+    }
+    function beep(ctx, t, freq, dur){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      o.connect(g); g.connect(ctx.destination);
+      const a = g.gain;
+      a.setValueAtTime(0, t);
+      a.linearRampToValueAtTime(0.6, t + 0.01);
+      a.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+
+    // ---------- Notifications ----------
+    function notifState(){ if (!('Notification' in window)) return 'unsupported'; return Notification.permission; }
+    function updateNotifUI(){
+      if (!notifBtn) return;
+      const p = notifState();
+      notifBtn.disabled = (p === 'unsupported');
+      if (p === 'granted'){ notifBtn.textContent = '🔔 Notifications: On'; notifBtn.title = 'Notifications enabled'; }
+      else if (p === 'denied'){ notifBtn.textContent = '🔕 Notifications: Blocked'; notifBtn.title = 'Blocked in browser settings'; }
+      else if (p === 'unsupported'){ notifBtn.textContent = '🔕 Notifications: Unavailable'; notifBtn.title = 'Not supported'; }
+      else { notifBtn.textContent = '🔔 Notifications: Off'; notifBtn.title = 'Click to enable'; }
+    }
+
+    if (notifBtn){
+      notifBtn.addEventListener('click', async () => {
+        if (!('Notification' in window)) return;
+        const p = Notification.permission;
+        if (p === 'granted'){
+          try { new Notification('Notifications enabled', { body: 'You will get an alert when the timer finishes.', silent: true }); } catch {}
+        } else if (p === 'denied'){
+          alert('Notifications are blocked. Enable them in the browser site settings.');
+        } else { // default
+          try { await Notification.requestPermission(); } catch {}
+          updateNotifUI();
+          if (Notification.permission === 'granted'){
+            try { new Notification('Notifications enabled', { body: 'You will get alerts when the timer finishes.', silent: true }); } catch {}
+          }
+        }
+      });
+    }
+
+    // ---------- Wiring ----------
+    startBtn.addEventListener('click', startTimer);
+    pauseBtn.addEventListener('click', ()=> paused ? resumeTimer() : pauseTimer());
+    resetBtn.addEventListener('click', resetTimer);
+    addMinBtn.addEventListener('click', addMinute);
+
+    quick.addEventListener('click', e=>{
+      const btn = e.target.closest('button[data-pick]');
+      if (!btn || running) return;
+      display.textContent = btn.getAttribute('data-pick') || '00:00:00';
+      normalizeDisplay();
+      statusTxt.textContent = 'Ready';
+    });
+
+    // Main display editing
+    display.addEventListener('input', ()=>{
+      if (running) return;
+      normalizeDisplay(); // auto ":" + clamp
+      statusTxt.textContent = 'Ready';
+    });
+    display.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter'){ e.preventDefault(); startTimer(); }
+    });
+    display.addEventListener('paste', (e)=>{
+      e.preventDefault();
+      const t = (e.clipboardData||window.clipboardData).getData('text');
+      display.textContent = formatDigits(t);
+      normalizeDisplay();
+    });
+
+    // Keyboard shortcuts (ignore when editing)
+    document.addEventListener('keydown', (e)=>{
+      const ae = document.activeElement;
+      const editing = ae && (ae.getAttribute && ae.getAttribute('contenteditable') === 'true');
+      const isSpace = (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar');
+      if (isSpace && !editing){ e.preventDefault(); if (running){ paused ? resumeTimer() : pauseTimer(); } else { startTimer(); } }
+      else if ((e.key === 'r' || e.key === 'R') && !editing){ e.preventDefault(); resetTimer(); }
+    });
+
+    // ---------- Init ----------
+    // Ask permission once on first open if missing
+    try {
+      if ('Notification' in window) {
+        const asked = localStorage.getItem('timer:notifAsked') === '1';
+        if (Notification.permission === 'default' && !asked){
+          Notification.requestPermission().then((perm)=>{
+            try { localStorage.setItem('timer:notifAsked','1'); } catch {}
+            if (perm === 'granted'){
+              try { new Notification('Notifications enabled', { body: 'You will get alerts when the timer finishes.', silent: true }); } catch {}
+            }
+            updateNotifUI();
+          }).catch(()=>{});
+        }
+      }
+    } catch {}
+    updateNotifUI();
+
+    // Restore last typed digits if any
+    try {
+      const ds = localStorage.getItem('timer:lastDigits');
+      if (ds) display.textContent = formatDigits(ds);
+    } catch {}
+    normalizeDisplay();
+    statusTxt.textContent = 'Ready';
+  })();
+  </script>
+</body>
+</html>
