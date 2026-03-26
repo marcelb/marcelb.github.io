@@ -586,10 +586,6 @@ function handleClearAll() {
   winIfHitPending = false;
   currentGeneration++;
 
-  // Reset position to default
-  currentPosition = 'blinds';
-
-
   // Reset pot and bet inputs
   if (potInput) potInput.value = '';
   if (betInput) betInput.value = '';

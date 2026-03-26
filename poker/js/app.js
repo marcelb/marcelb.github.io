@@ -125,9 +125,8 @@ function attachClearAllPositionReset() {
     return;
   }
 
-  clearBtn.addEventListener('click', () => {
-    resetPositionToBlinds();
-  });
+  // Position is intentionally NOT reset by Clear All
+
 }
 
 // ---------------------------------------------------------------------------
