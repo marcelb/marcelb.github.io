@@ -589,11 +589,6 @@ function handleClearAll() {
   // Reset position to default
   currentPosition = 'blinds';
 
-  // Reset opponent count to default
-  opponentCount = 1;
-  if (opponentSelectEl) {
-    opponentSelectEl.value = '1';
-  }
 
   // Reset pot and bet inputs
   if (potInput) potInput.value = '';
