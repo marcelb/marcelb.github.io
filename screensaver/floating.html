@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OLED Screensaver</title>
+  <style>
+    /* --- Reset and layout --- */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    #canvas {
+      display: block;
+      cursor: none;
+    }
+
+    /* --- Settings overlay --- */
+    #settings-overlay {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 260px;
+      padding: 16px 18px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      color: #888888;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #settings-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #settings-overlay .settings-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #666666;
+      margin-bottom: 12px;
+    }
+
+    #settings-overlay .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    #settings-overlay .setting-row label {
+      flex: 0 0 auto;
+      margin-right: 10px;
+      color: #888888;
+    }
+
+    #settings-overlay .setting-row .setting-value {
+      width: 32px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #777777;
+      font-size: 12px;
+    }
+
+    #settings-overlay input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1 1 auto;
+      height: 4px;
+      background: #333333;
+      border-radius: 2px;
+      outline: none;
+      margin: 0 8px;
+      cursor: pointer;
+    }
+
+    #settings-overlay input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555555;
+      cursor: pointer;
+    }
+
+    #settings-overlay input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555555;
+      border: none;
+      cursor: pointer;
+    }
+
+    #settings-overlay input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 32px;
+      height: 18px;
+      background: #333333;
+      border-radius: 9px;
+      position: relative;
+      cursor: pointer;
+      outline: none;
+      flex-shrink: 0;
+    }
+
+    #settings-overlay input[type="checkbox"]::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555555;
+      transition: transform 0.2s ease;
+    }
+
+    #settings-overlay input[type="checkbox"]:checked {
+      background: #444444;
+    }
+
+    #settings-overlay input[type="checkbox"]:checked::after {
+      transform: translateX(14px);
+      background: #888888;
+    }
+
+    #settings-overlay .fps-display {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #2a2a2a;
+      font-size: 11px;
+      color: #555555;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <!-- Settings overlay markup -->
+  <div id="settings-overlay">
+    <div class="settings-title">Settings</div>
+
+    <div class="setting-row">
+      <label for="setting-particles">Particles</label>
+      <input type="range" id="setting-particles" min="10" max="200" step="1" value="50">
+      <span class="setting-value" id="val-particles">50</span>
+    </div>
+
+    <div class="setting-row">
+      <label for="setting-speed">Speed</label>
+      <input type="range" id="setting-speed" min="1" max="3" step="1" value="1">
+      <span class="setting-value" id="val-speed">Slow</span>
+    </div>
+
+    <div class="setting-row">
+      <label for="setting-brightness">Brightness</label>
+      <input type="range" id="setting-brightness" min="20" max="60" step="1" value="40">
+      <span class="setting-value" id="val-brightness">40%</span>
+    </div>
+
+    <div class="setting-row">
+      <label for="setting-connections">Lines</label>
+      <input type="checkbox" id="setting-connections" checked>
+    </div>
+
+    <div class="fps-display">FPS: <span id="fps-value">--</span></div>
+  </div>
+  <script>
+    'use strict';
+
+    // --- Config ---
+    // Central configuration with all tunable values. Defaults match the spec.
+    const Config = {
+      particleCount: 50,
+      // Speed multiplier: "slow" = 1, "medium" = 2, "fast" = 3
+      speed: 1,
+      // Maximum brightness percentage (20-60). Controls RGB channel cap.
+      maxBrightness: 40,
+      // Whether connection lines between nearby particles are drawn.
+      connectionLines: true,
+      // Distance threshold (in pixels) for drawing connection lines.
+      connectionDistance: 150,
+      // Squared threshold, pre-computed to avoid sqrt in hot path.
+      connectionDistanceSq: 150 * 150,
+      // Minimum and maximum particle radius in pixels.
+      minRadius: 1,
+      maxRadius: 4,
+      // Base velocity range in pixels per second (before speed multiplier).
+      minSpeed: 8,
+      maxSpeed: 25,
+      // Absolute minimum speed floor to guarantee no particle is ever stationary.
+      speedFloor: 0.1,
+      // Hue rotation rate in degrees per second -- slow and gradual.
+      hueRotationRate: 2,
+      // Particle alpha range for rendering.
+      minAlpha: 0.3,
+      maxAlpha: 0.8,
+      // Connection line alpha range (inversely proportional to distance).
+      connectionMinAlpha: 0.05,
+      connectionMaxAlpha: 0.2,
+
+      // Computes the maximum RGB channel value from the brightness percentage.
+      maxChannel() {
+        return Math.round(255 * (Config.maxBrightness / 100));
+      },
+
+      // Updates the squared distance threshold when connectionDistance changes.
+      updateConnectionDistanceSq() {
+        Config.connectionDistanceSq = Config.connectionDistance * Config.connectionDistance;
+      }
+    };
+
+    // --- Particle ---
+    // Handles creation, movement, edge wrapping, and color for each particle.
+    const Particle = {
+      // Pre-allocated array of all active particles.
+      pool: [],
+
+      // Creates a single particle with random position and velocity.
+      create(canvasWidth, canvasHeight) {
+        const angle = Math.random() * Math.PI * 2;
+        const baseSpeed = Config.minSpeed + Math.random() * (Config.maxSpeed - Config.minSpeed);
+        const speed = baseSpeed * Config.speed;
+
+        let vx = Math.cos(angle) * speed;
+        let vy = Math.sin(angle) * speed;
+
+        // Enforce minimum speed floor on each axis so the particle always moves
+        if (Math.abs(vx) < Config.speedFloor) {
+          vx = vx >= 0 ? Config.speedFloor : -Config.speedFloor;
+        }
+        if (Math.abs(vy) < Config.speedFloor) {
+          vy = vy >= 0 ? Config.speedFloor : -Config.speedFloor;
+        }
+
+        const radius = Config.minRadius + Math.random() * (Config.maxRadius - Config.minRadius);
+        const hue = Math.random() * 360;
+        const baseAlpha = Config.minAlpha + Math.random() * (Config.maxAlpha - Config.minAlpha);
+
+        const particle = {
+          x: Math.random() * canvasWidth,
+          y: Math.random() * canvasHeight,
+          vx: vx,
+          vy: vy,
+          // Store the un-multiplied base speed so we can recalculate when speed setting changes
+          baseSpeed: baseSpeed,
+          radius: radius,
+          hue: hue,
+          baseAlpha: baseAlpha,
+          // Pre-computed color string, updated when hue or brightness changes
+          colorString: ''
+        };
+
+        Particle.updateColorString(particle);
+        return particle;
+      },
+
+      // Moves a particle by delta-time seconds and wraps at canvas edges.
+      update(p, dt, canvasWidth, canvasHeight) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
+        // Slow hue rotation
+        p.hue = (p.hue + Config.hueRotationRate * dt) % 360;
+
+        // Edge wrapping: particle fully exits before reappearing on the opposite side
+        if (p.x < -p.radius) {
+          p.x = canvasWidth + p.radius;
+        } else if (p.x > canvasWidth + p.radius) {
+          p.x = -p.radius;
+        }
+
+        if (p.y < -p.radius) {
+          p.y = canvasHeight + p.radius;
+        } else if (p.y > canvasHeight + p.radius) {
+          p.y = -p.radius;
+        }
+      },
+
+      // Reusable scratch space for HSL-to-RGB conversion to avoid allocating arrays in the loop.
+      _rgb: [0, 0, 0],
+      // Frame-rate-agnostic index for cycling color refreshes through the pool
+      _colorRefreshIndex: 0,
+
+      // Converts HSL hue (with fixed S=70%, L=50%) to an RGB string, clamping to brightness cap.
+      // Writes result into Particle._rgb scratch array, then builds the pre-computed colorString.
+      updateColorString(p) {
+        const maxCh = Config.maxChannel();
+        Particle.hslToRgbClamped(p.hue, 0.7, 0.5, maxCh);
+        const rgb = Particle._rgb;
+        p.colorString = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + p.baseAlpha + ')';
+      },
+
+      // HSL to RGB conversion with per-channel clamping to maxChannel.
+      // h: 0-360, s: 0-1, l: 0-1, maxCh: 0-255
+      // Result is written into Particle._rgb (no allocation).
+      hslToRgbClamped(h, s, l, maxCh) {
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const hPrime = h / 60;
+        const x = c * (1 - Math.abs((hPrime % 2) - 1));
+        const m = l - c / 2;
+
+        let r1, g1, b1;
+
+        if (hPrime < 1) {
+          r1 = c; g1 = x; b1 = 0;
+        } else if (hPrime < 2) {
+          r1 = x; g1 = c; b1 = 0;
+        } else if (hPrime < 3) {
+          r1 = 0; g1 = c; b1 = x;
+        } else if (hPrime < 4) {
+          r1 = 0; g1 = x; b1 = c;
+        } else if (hPrime < 5) {
+          r1 = x; g1 = 0; b1 = c;
+        } else {
+          r1 = c; g1 = 0; b1 = x;
+        }
+
+        // Convert to 0-255 range and clamp to brightness cap
+        const out = Particle._rgb;
+        out[0] = Math.min(Math.round((r1 + m) * 255), maxCh);
+        out[1] = Math.min(Math.round((g1 + m) * 255), maxCh);
+        out[2] = Math.min(Math.round((b1 + m) * 255), maxCh);
+      },
+
+      // Re-computes all color strings (call when brightness setting changes).
+      refreshAllColors() {
+        const pool = Particle.pool;
+        for (let i = 0; i < pool.length; i++) {
+          Particle.updateColorString(pool[i]);
+        }
+      },
+
+      // Ensures the particle is within canvas bounds (call after resize).
+      clampToCanvas(p, canvasWidth, canvasHeight) {
+        if (p.x < 0 || p.x > canvasWidth) p.x = Math.random() * canvasWidth;
+        if (p.y < 0 || p.y > canvasHeight) p.y = Math.random() * canvasHeight;
+      }
+    };
+
+    // --- Renderer ---
+    // Owns the canvas context, resize handling, and the main animation loop.
+    const Renderer = {
+      canvas: null,
+      ctx: null,
+      width: 0,
+      height: 0,
+      lastTimestamp: 0,
+      resizeTimeoutId: 0,
+      animationFrameId: 0,
+
+      init() {
+        Renderer.canvas = document.getElementById('canvas');
+        Renderer.ctx = Renderer.canvas.getContext('2d');
+        Renderer.sizeCanvas();
+      },
+
+      // Sets canvas dimensions to match the window. CSS only controls display:block.
+      sizeCanvas() {
+        Renderer.width = window.innerWidth;
+        Renderer.height = window.innerHeight;
+        Renderer.canvas.width = Renderer.width;
+        Renderer.canvas.height = Renderer.height;
+      },
+
+      // Immediate resize: sizes canvas and clamps particles without delay.
+      // Used for fullscreen changes where any delay leaves the canvas wrong-sized.
+      resizeImmediate() {
+        clearTimeout(Renderer.resizeTimeoutId);
+        Renderer.sizeCanvas();
+
+        const pool = Particle.pool;
+        for (let i = 0; i < pool.length; i++) {
+          Particle.clampToCanvas(pool[i], Renderer.width, Renderer.height);
+        }
+      },
+
+      // Debounced resize handler (100ms) to avoid thrashing during window drag-resize.
+      handleResize() {
+        clearTimeout(Renderer.resizeTimeoutId);
+        Renderer.resizeTimeoutId = setTimeout(function () {
+          Renderer.sizeCanvas();
+
+          // Re-check that all particles are within the new bounds
+          const pool = Particle.pool;
+          for (let i = 0; i < pool.length; i++) {
+            Particle.clampToCanvas(pool[i], Renderer.width, Renderer.height);
+          }
+        }, 100);
+      },
+
+      // Starts the animation loop.
+      start() {
+        Renderer.lastTimestamp = performance.now();
+        Renderer.animationFrameId = requestAnimationFrame(Renderer.frame);
+      },
+
+      // Main animation frame callback.
+      frame(timestamp) {
+        // Delta time in seconds, capped at 100ms to prevent huge jumps after tab switch
+        const dt = Math.min((timestamp - Renderer.lastTimestamp) / 1000, 0.1);
+        Renderer.lastTimestamp = timestamp;
+
+        const ctx = Renderer.ctx;
+        const w = Renderer.width;
+        const h = Renderer.height;
+        const pool = Particle.pool;
+        const len = pool.length;
+
+        // Clear canvas with opaque black -- NOT clearRect (which leaves transparent pixels)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, w, h);
+
+        // Update all particles
+        for (let i = 0; i < len; i++) {
+          Particle.update(pool[i], dt, w, h);
+        }
+
+        // Periodically refresh color strings since hue rotates slowly.
+        // Doing it every frame for all particles would be wasteful; instead
+        // we cycle through a few particles per frame using a frame counter.
+        // At ~60fps and 50 particles, updating 2 per frame refreshes all every ~0.4s.
+        if (len > 0) {
+          const colorRefreshCount = Math.min(2, len);
+          const safeLen = Math.max(len, 1);
+          // Ensure the index is within bounds after pool size changes
+          if (Particle._colorRefreshIndex >= safeLen) {
+            Particle._colorRefreshIndex = Particle._colorRefreshIndex % safeLen;
+          }
+          for (let c = 0; c < colorRefreshCount; c++) {
+            const idx = (Particle._colorRefreshIndex + c) % safeLen;
+            Particle.updateColorString(pool[idx]);
+          }
+          Particle._colorRefreshIndex = (Particle._colorRefreshIndex + colorRefreshCount) % safeLen;
+        }
+
+        // Draw connection lines between nearby particles
+        if (Config.connectionLines) {
+          Renderer.drawConnections(ctx, pool, len);
+        }
+
+        // Draw particles as filled circles
+        for (let i = 0; i < len; i++) {
+          const p = pool[i];
+          ctx.fillStyle = p.colorString;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, 6.283185307179586);
+          ctx.fill();
+        }
+
+        // Record frame time for FPS tracking and adaptive quality management
+        Performance.recordFrame(timestamp);
+
+        Renderer.animationFrameId = requestAnimationFrame(Renderer.frame);
+      },
+
+      // Draws faint connection lines between particles within the distance threshold.
+      // Uses distance-squared comparison to avoid Math.sqrt.
+      drawConnections(ctx, pool, len) {
+        const thresholdSq = Config.connectionDistanceSq;
+        const maxAlpha = Config.connectionMaxAlpha;
+        const minAlpha = Config.connectionMinAlpha;
+        const alphaRange = maxAlpha - minAlpha;
+        const maxCh = Config.maxChannel();
+
+        // Pre-compute the line color once per frame as an rgb() string.
+        // Per-pair opacity is handled via globalAlpha (a numeric write, no allocation).
+        const lineBrightness = Math.round(maxCh * 0.5);
+        ctx.strokeStyle = 'rgb(' + lineBrightness + ',' + lineBrightness + ',' + lineBrightness + ')';
+        ctx.lineWidth = 1;
+
+        for (let i = 0; i < len; i++) {
+          const a = pool[i];
+          for (let j = i + 1; j < len; j++) {
+            const b = pool[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq < thresholdSq) {
+              // Alpha fades linearly with distance: closer = more opaque
+              const ratio = distSq / thresholdSq;
+              ctx.globalAlpha = maxAlpha - ratio * alphaRange;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+          }
+        }
+
+        // Restore full opacity so subsequent draws (particles) are unaffected
+        ctx.globalAlpha = 1.0;
+      }
+    };
+
+    // --- Fullscreen ---
+    // Handles fullscreen entry via click or F key, with Safari vendor prefix fallback.
+    const Fullscreen = {
+      init() {
+        // Click on canvas enters fullscreen
+        Renderer.canvas.addEventListener('click', Fullscreen.requestFullscreen);
+
+        // F key enters fullscreen
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'f' || e.key === 'F') {
+            // Prevent browser "Find" dialog from opening
+            e.preventDefault();
+            Fullscreen.requestFullscreen();
+          }
+          // NOTE: We intentionally do NOT intercept Escape -- the browser handles fullscreen exit natively.
+        });
+
+        // Resize canvas immediately when fullscreen state changes (no debounce)
+        document.addEventListener('fullscreenchange', Renderer.resizeImmediate);
+        // Safari vendor prefix
+        document.addEventListener('webkitfullscreenchange', Renderer.resizeImmediate);
+      },
+
+      requestFullscreen() {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(function () {
+            // Silently ignore -- this fails if not triggered by a user gesture
+          });
+        } else if (el.webkitRequestFullscreen) {
+          // Safari vendor prefix fallback -- does not return a promise, so wrap in try/catch
+          try {
+            el.webkitRequestFullscreen();
+          } catch (_ignored) {
+            // Silently ignore -- may fail without user gesture on some Safari versions
+          }
+        }
+      }
+    };
+
+    // --- Settings ---
+    // Overlay show/hide, localStorage persistence, live config updates, auto-hide timer.
+    const Settings = {
+      STORAGE_KEY: 'oled-screensaver-settings',
+      AUTO_HIDE_MS: 5000,
+      SPEED_LABELS: ['Slow', 'Medium', 'Fast'],
+
+      overlay: null,
+      hideTimerId: 0,
+      isVisible: false,
+
+      // DOM element references, cached once during init
+      elParticles: null,
+      elSpeed: null,
+      elBrightness: null,
+      elConnections: null,
+      valParticles: null,
+      valSpeed: null,
+      valBrightness: null,
+      fpsValue: null,
+
+      init() {
+        Settings.overlay = document.getElementById('settings-overlay');
+        Settings.elParticles = document.getElementById('setting-particles');
+        Settings.elSpeed = document.getElementById('setting-speed');
+        Settings.elBrightness = document.getElementById('setting-brightness');
+        Settings.elConnections = document.getElementById('setting-connections');
+        Settings.valParticles = document.getElementById('val-particles');
+        Settings.valSpeed = document.getElementById('val-speed');
+        Settings.valBrightness = document.getElementById('val-brightness');
+        Settings.fpsValue = document.getElementById('fps-value');
+
+        // Load persisted settings into Config before anything else uses them
+        Settings.loadFromStorage();
+
+        // Sync the UI controls to reflect the loaded config
+        Settings.syncUIFromConfig();
+
+        // Attach input change listeners
+        Settings.elParticles.addEventListener('input', Settings.onParticleCountChange);
+        Settings.elSpeed.addEventListener('input', Settings.onSpeedChange);
+        Settings.elBrightness.addEventListener('input', Settings.onBrightnessChange);
+        Settings.elConnections.addEventListener('change', Settings.onConnectionsChange);
+
+        // Mouse movement over the entire document shows the overlay
+        document.addEventListener('mousemove', Settings.onMouseMove, { passive: true });
+
+        // Interaction within the overlay resets the auto-hide timer
+        Settings.overlay.addEventListener('mousemove', Settings.resetAutoHide, { passive: true });
+        Settings.overlay.addEventListener('input', Settings.resetAutoHide, { passive: true });
+
+        // S key toggles the overlay
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 's' || e.key === 'S') {
+            if (Settings.isVisible) {
+              Settings.hide();
+            } else {
+              Settings.show();
+            }
+          }
+        });
+      },
+
+      show() {
+        Settings.isVisible = true;
+        Settings.overlay.classList.add('visible');
+        Settings.startAutoHide();
+      },
+
+      hide() {
+        Settings.isVisible = false;
+        Settings.overlay.classList.remove('visible');
+        // Always clear any pending timer when hiding explicitly
+        clearTimeout(Settings.hideTimerId);
+        Settings.hideTimerId = 0;
+      },
+
+      // Starts (or restarts) the auto-hide countdown.
+      // Always clears the previous timer first to prevent race conditions.
+      startAutoHide() {
+        clearTimeout(Settings.hideTimerId);
+        Settings.hideTimerId = setTimeout(function () {
+          Settings.hide();
+        }, Settings.AUTO_HIDE_MS);
+      },
+
+      resetAutoHide() {
+        if (Settings.isVisible) {
+          Settings.startAutoHide();
+        }
+      },
+
+      onMouseMove() {
+        if (!Settings.isVisible) {
+          Settings.show();
+        } else {
+          Settings.resetAutoHide();
+        }
+      },
+
+      // --- Input handlers: validate, apply to Config, update display, save ---
+
+      onParticleCountChange() {
+        const raw = parseInt(Settings.elParticles.value, 10);
+        const clamped = Settings.clamp(raw, 10, 200);
+        Config.particleCount = clamped;
+        Settings.valParticles.textContent = clamped;
+
+        // Notify Performance that the user's target has changed
+        Performance.currentTarget = clamped;
+        // Clamp adjustedCount so adaptive quality doesn't desync when user lowers target
+        Performance.adjustedCount = Math.min(Performance.adjustedCount, clamped);
+
+        // Adjust the live particle pool to match the new count
+        Settings.applyParticleCount(clamped);
+
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      onSpeedChange() {
+        const raw = parseInt(Settings.elSpeed.value, 10);
+        const clamped = Settings.clamp(raw, 1, 3);
+        Config.speed = clamped;
+        Settings.valSpeed.textContent = Settings.SPEED_LABELS[clamped - 1];
+
+        // Recalculate velocities for all existing particles
+        const pool = Particle.pool;
+        for (let i = 0; i < pool.length; i++) {
+          const p = pool[i];
+          // Scale velocity from the stored base speed
+          const ratio = (clamped * p.baseSpeed) / (Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1);
+          p.vx *= ratio;
+          p.vy *= ratio;
+          // Re-enforce minimum speed floor
+          if (Math.abs(p.vx) < Config.speedFloor) {
+            p.vx = p.vx >= 0 ? Config.speedFloor : -Config.speedFloor;
+          }
+          if (Math.abs(p.vy) < Config.speedFloor) {
+            p.vy = p.vy >= 0 ? Config.speedFloor : -Config.speedFloor;
+          }
+        }
+
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      onBrightnessChange() {
+        const raw = parseInt(Settings.elBrightness.value, 10);
+        const clamped = Settings.clamp(raw, 20, 60);
+        Config.maxBrightness = clamped;
+        Settings.valBrightness.textContent = clamped + '%';
+
+        // Recompute all particle color strings with the new brightness cap
+        Particle.refreshAllColors();
+
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      onConnectionsChange() {
+        Config.connectionLines = Settings.elConnections.checked;
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      // Adjusts the live particle pool to match the desired count.
+      // Adds or removes particles as needed.
+      applyParticleCount(target) {
+        const pool = Particle.pool;
+        // If performance monitor has reduced count, let it manage the actual pool size.
+        // We only directly resize if the adjusted count equals the old target
+        // (meaning performance isn't actively limiting).
+        const effectiveTarget = Math.min(target, Performance.adjustedCount <= Performance.currentTarget
+          ? target
+          : Performance.adjustedCount);
+
+        if (pool.length < effectiveTarget) {
+          while (pool.length < effectiveTarget) {
+            pool.push(Particle.create(Renderer.width, Renderer.height));
+          }
+        } else if (pool.length > effectiveTarget) {
+          pool.length = effectiveTarget;
+        }
+
+        // Keep adjustedCount in sync so the adaptive quality system works correctly
+        Performance.adjustedCount = pool.length;
+      },
+
+      // Synchronizes UI controls to reflect current Config values.
+      syncUIFromConfig() {
+        Settings.elParticles.value = Config.particleCount;
+        Settings.valParticles.textContent = Config.particleCount;
+
+        Settings.elSpeed.value = Config.speed;
+        Settings.valSpeed.textContent = Settings.SPEED_LABELS[Config.speed - 1];
+
+        Settings.elBrightness.value = Config.maxBrightness;
+        Settings.valBrightness.textContent = Config.maxBrightness + '%';
+
+        Settings.elConnections.checked = Config.connectionLines;
+      },
+
+      // Updates the FPS readout in the overlay (called by Performance).
+      updateFPSDisplay(fps) {
+        if (Settings.fpsValue !== null) {
+          Settings.fpsValue.textContent = fps;
+        }
+      },
+
+      // --- localStorage ---
+
+      loadFromStorage() {
+        try {
+          const raw = localStorage.getItem(Settings.STORAGE_KEY);
+          if (raw === null) return;
+
+          const data = JSON.parse(raw);
+          if (typeof data !== 'object' || data === null) return;
+
+          // Validate and clamp each field individually; missing or invalid fields keep defaults
+          if (typeof data.particleCount === 'number' && isFinite(data.particleCount)) {
+            Config.particleCount = Settings.clamp(Math.round(data.particleCount), 10, 200);
+          }
+          if (typeof data.speed === 'number' && isFinite(data.speed)) {
+            Config.speed = Settings.clamp(Math.round(data.speed), 1, 3);
+          }
+          if (typeof data.maxBrightness === 'number' && isFinite(data.maxBrightness)) {
+            Config.maxBrightness = Settings.clamp(Math.round(data.maxBrightness), 20, 60);
+          }
+          if (typeof data.connectionLines === 'boolean') {
+            Config.connectionLines = data.connectionLines;
+          }
+        } catch (_ignored) {
+          // Corrupt JSON, missing API, or any other error -- fall back to defaults silently
+        }
+      },
+
+      saveToStorage() {
+        try {
+          const data = {
+            particleCount: Config.particleCount,
+            speed: Config.speed,
+            maxBrightness: Config.maxBrightness,
+            connectionLines: Config.connectionLines
+          };
+          localStorage.setItem(Settings.STORAGE_KEY, JSON.stringify(data));
+        } catch (_ignored) {
+          // Quota exceeded or unavailable storage -- non-fatal, silently skip
+        }
+      },
+
+      // Clamps a number to [min, max]. Handles NaN by returning min.
+      clamp(value, min, max) {
+        if (!isFinite(value)) return min;
+        return value < min ? min : (value > max ? max : value);
+      }
+    };
+
+    // --- Performance ---
+    // FPS tracking via fixed-size ring buffer and adaptive particle count management.
+    const Performance = {
+      // Ring buffer for frame timestamps (fixed size, never grows)
+      BUFFER_SIZE: 60,
+      buffer: new Float64Array(60),
+      bufferIndex: 0,
+      bufferFilled: false,
+
+      // Adaptive quality thresholds
+      LOW_FPS_THRESHOLD: 30,
+      HIGH_FPS_THRESHOLD: 50,
+      LOW_FPS_DURATION_MS: 2000,
+      HIGH_FPS_DURATION_MS: 5000,
+      MIN_PARTICLES: 10,
+      // How many particles to restore per second during recovery
+      RECOVERY_RATE: 2,
+
+      // Tracking state for adaptive quality
+      currentTarget: 50,     // The user's configured particle count
+      adjustedCount: 50,     // The actual running particle count (may be reduced)
+      lowFPSSince: 0,        // Timestamp when FPS first dropped below threshold (0 = not low)
+      highFPSSince: 0,       // Timestamp when FPS first rose above recovery threshold (0 = not high)
+      lastRecoveryTime: 0,   // Timestamp of last particle restoration
+      currentFPS: 60,        // Most recent calculated FPS
+      // Throttle FPS display updates to avoid string creation every frame
+      lastDisplayUpdate: 0,
+
+      init() {
+        Performance.currentTarget = Config.particleCount;
+        Performance.adjustedCount = Config.particleCount;
+      },
+
+      // Called once per frame from the render loop with the rAF timestamp.
+      recordFrame(timestamp) {
+        // Write to ring buffer
+        Performance.buffer[Performance.bufferIndex] = timestamp;
+        Performance.bufferIndex = (Performance.bufferIndex + 1) % Performance.BUFFER_SIZE;
+
+        if (!Performance.bufferFilled && Performance.bufferIndex === 0) {
+          Performance.bufferFilled = true;
+        }
+
+        // Need at least 2 samples to compute FPS
+        const sampleCount = Performance.bufferFilled ? Performance.BUFFER_SIZE : Performance.bufferIndex;
+        if (sampleCount < 2) return;
+
+        // Calculate average FPS from the ring buffer.
+        // The oldest entry is at bufferIndex (if filled) or 0 (if not filled).
+        const oldestIndex = Performance.bufferFilled ? Performance.bufferIndex : 0;
+        const newestIndex = (Performance.bufferIndex - 1 + Performance.BUFFER_SIZE) % Performance.BUFFER_SIZE;
+        const oldestTime = Performance.buffer[oldestIndex];
+        const newestTime = Performance.buffer[newestIndex];
+        const elapsed = newestTime - oldestTime;
+
+        if (elapsed <= 0) return;
+
+        const fps = ((sampleCount - 1) / elapsed) * 1000;
+        Performance.currentFPS = fps;
+
+        // Update the FPS display approximately twice per second (every ~500ms)
+        if (timestamp - Performance.lastDisplayUpdate > 500) {
+          Performance.lastDisplayUpdate = timestamp;
+          Settings.updateFPSDisplay(Math.round(fps));
+        }
+
+        // --- Adaptive quality ---
+        Performance.adaptQuality(timestamp, fps);
+      },
+
+      // Reduces or restores particle count based on sustained FPS levels.
+      adaptQuality(timestamp, fps) {
+        // --- Reduction: FPS below threshold for sustained period ---
+        if (fps < Performance.LOW_FPS_THRESHOLD) {
+          if (Performance.lowFPSSince === 0) {
+            Performance.lowFPSSince = timestamp;
+          }
+          // Reset high-FPS tracking while we are in a low state
+          Performance.highFPSSince = 0;
+
+          const lowDuration = timestamp - Performance.lowFPSSince;
+          if (lowDuration >= Performance.LOW_FPS_DURATION_MS) {
+            // Reduce by 10%, minimum MIN_PARTICLES
+            const reduction = Math.max(1, Math.round(Performance.adjustedCount * 0.1));
+            const newCount = Math.max(Performance.MIN_PARTICLES, Performance.adjustedCount - reduction);
+
+            if (newCount < Performance.adjustedCount) {
+              Performance.adjustedCount = newCount;
+              // Trim the particle pool to the new count
+              if (Particle.pool.length > newCount) {
+                Particle.pool.length = newCount;
+              }
+            }
+
+            // Reset the timer so we wait another full period before reducing further
+            Performance.lowFPSSince = timestamp;
+          }
+        } else {
+          // FPS is acceptable, clear the low counter
+          Performance.lowFPSSince = 0;
+        }
+
+        // --- Recovery: FPS above high threshold for sustained period ---
+        if (fps > Performance.HIGH_FPS_THRESHOLD && Performance.adjustedCount < Performance.currentTarget) {
+          if (Performance.highFPSSince === 0) {
+            Performance.highFPSSince = timestamp;
+          }
+
+          const highDuration = timestamp - Performance.highFPSSince;
+          if (highDuration >= Performance.HIGH_FPS_DURATION_MS) {
+            // Gradual recovery: add particles at RECOVERY_RATE per second
+            const timeSinceLastRecovery = Performance.lastRecoveryTime === 0
+              ? 1000
+              : timestamp - Performance.lastRecoveryTime;
+
+            const toAdd = Math.max(1, Math.round(Performance.RECOVERY_RATE * (timeSinceLastRecovery / 1000)));
+            const newCount = Math.min(Performance.currentTarget, Performance.adjustedCount + toAdd);
+
+            if (newCount > Performance.adjustedCount) {
+              // Add new particles to the pool
+              const addCount = newCount - Performance.adjustedCount;
+              for (let i = 0; i < addCount; i++) {
+                Particle.pool.push(Particle.create(Renderer.width, Renderer.height));
+              }
+              Performance.adjustedCount = newCount;
+            }
+
+            Performance.lastRecoveryTime = timestamp;
+
+            // If fully recovered, stop tracking
+            if (Performance.adjustedCount >= Performance.currentTarget) {
+              Performance.highFPSSince = 0;
+              Performance.lastRecoveryTime = 0;
+            }
+          }
+        } else if (fps <= Performance.HIGH_FPS_THRESHOLD) {
+          // FPS is not high enough for recovery, reset the counter
+          Performance.highFPSSince = 0;
+          Performance.lastRecoveryTime = 0;
+        }
+      }
+    };
+
+    // --- Init ---
+    // Entry point: loads settings, sets up canvas, creates particles, starts the animation loop.
+    document.addEventListener('DOMContentLoaded', function () {
+      // Initialize settings first so Config has localStorage values before particle creation
+      Settings.init();
+
+      Renderer.init();
+
+      // Initialize performance tracking with the user's configured count
+      Performance.init();
+
+      // Create the initial particle pool from the (now possibly loaded) config
+      const count = Config.particleCount;
+      for (let i = 0; i < count; i++) {
+        Particle.pool.push(Particle.create(Renderer.width, Renderer.height));
+      }
+
+      // Attach resize listener (passive since we never call preventDefault)
+      window.addEventListener('resize', Renderer.handleResize, { passive: true });
+
+      // Initialize fullscreen controls
+      Fullscreen.init();
+
+      // Start the animation
+      Renderer.start();
+    });
+  </script>
+</body>
+</html>
