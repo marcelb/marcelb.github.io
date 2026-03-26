@@ -595,6 +595,10 @@ function handleClearAll() {
     opponentSelectEl.value = '1';
   }
 
+  // Reset pot and bet inputs
+  if (potInput) potInput.value = '';
+  if (betInput) betInput.value = '';
+
   renderSlots();
   renderPickerState();
   clearElement(drawsAreaEl);
