@@ -1,0 +1,1599 @@
+/* ===================================================================
+   styles.css -- Poker Helper responsive stylesheet
+   Mobile-first: base styles target 320px viewport.
+   Breakpoints: 480px, 600px, 768px, 1024px (min-width).
+   =================================================================== */
+
+/* -- Reset & base -------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Hand-strength palette -- background colors */
+  --color-premium: #d4380d;
+  --color-strong: #d46b08;
+  --color-playable: #7cb305;
+  --color-marginal: #08979c;
+  --color-fold: #595959;
+
+  /* Hand-strength palette -- text on colored backgrounds (WCAG AA) */
+  --color-premium-text: #fff;
+  --color-strong-text: #fff;
+  --color-playable-text: #fff;
+  --color-marginal-text: #fff;
+  --color-fold-text: #d9d9d9;
+
+  /* Non-color indicators: text labels that appear inside cells */
+  --indicator-premium: "\2605\2605";
+  --indicator-strong: "\2605";
+  --indicator-playable: "\25CF";
+  --indicator-marginal: "\25CB";
+  --indicator-fold: "";
+
+  /* UI palette */
+  --color-bg: #1a1a2e;
+  --color-bg-surface: #16213e;
+  --color-bg-elevated: #0f3460;
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #a0a0b0;
+  --color-accent: #e94560;
+  --color-accent-hover: #ff6b81;
+  --color-border: #2a2a4a;
+  --color-focus-ring: #53a8ff;
+
+  /* Card suit colors */
+  --color-suit-clubs: #4caf50;
+  --color-suit-diamonds: #2196f3;
+  --color-suit-hearts: #f44336;
+  --color-suit-spades: #e0e0e0;
+
+  /* Recommendation colors */
+  --color-call: #4caf50;
+  --color-fold-rec: #f44336;
+  --color-marginal-rec: #ffb300;
+
+  /* Spacing scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  /* Font stack */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono",
+    "Cascadia Code", Consolas, monospace;
+
+  /* Touch target minimum */
+  --touch-min: 44px;
+}
+
+html {
+  font-size: 100%; /* 16px base */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Focus styles for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Remove focus ring for mouse/touch interactions */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* -- Typography ---------------------------------------------------- */
+
+h1, h2, h3, h4 {
+  margin: 0 0 var(--space-sm);
+  line-height: 1.3;
+}
+
+p {
+  margin: 0 0 var(--space-md);
+}
+
+strong {
+  font-weight: 600;
+}
+
+/* -- App header ---------------------------------------------------- */
+
+.app-header {
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.app-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  letter-spacing: 0.02em;
+}
+
+/* (Page navigation and page visibility styles removed -- single-page layout) */
+
+/* -- Section content (simple padding container, no collapse) ------ */
+
+.section-content {
+  display: block;
+  padding: var(--space-md);
+}
+
+/* -- Main content area --------------------------------------------- */
+
+.main-content {
+  flex: 1;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tool-title {
+  font-size: 1.125rem;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.tool-description {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  margin-bottom: var(--space-md);
+}
+
+/* -- Tool sections ------------------------------------------------- */
+
+.tool-section {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.tool-section + .tool-section {
+  /* Tighter spacing between tool sections on Page 2 */
+  padding-top: 0;
+}
+
+/* -- Compact headings --------------------------------------------- */
+
+.tool-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+/* -- Tool subtitle (used in combined outs+potodds section) --------- */
+
+.tool-subtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+/* -- Info text toggle (inline collapse for explanatory content) ----- */
+
+.info-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
+  margin: 0 0 var(--space-sm);
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-family);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.info-toggle:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Small inline chevron for info toggles */
+.info-toggle::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  transition: transform 0.2s ease;
+}
+
+.info-toggle[aria-expanded="false"]::after {
+  transform: rotate(-90deg);
+}
+
+.info-content {
+  display: block;
+}
+
+.info-content--collapsed {
+  display: none;
+}
+
+/* -- Position filter buttons --------------------------------------- */
+
+.position-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
+.position-button {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.position-button:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.position-button--active {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* -- Position descriptions ----------------------------------------- */
+
+.position-descriptions {
+  margin-bottom: var(--space-sm);
+}
+
+.position-description-list {
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.position-description-list dt {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  padding: var(--space-xs) 0;
+}
+
+.position-description-list dd {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  padding: var(--space-xs) 0;
+  line-height: 1.4;
+}
+
+/* -- Chart legend -------------------------------------------------- */
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  font-size: 0.75rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-secondary);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.legend-item--premium .legend-swatch { background-color: var(--color-premium); }
+.legend-item--strong .legend-swatch { background-color: var(--color-strong); }
+.legend-item--playable .legend-swatch { background-color: var(--color-playable); }
+.legend-item--marginal .legend-swatch { background-color: var(--color-marginal); }
+.legend-item--fold .legend-swatch { background-color: var(--color-fold); }
+
+/* -- 13x13 preflop grid ------------------------------------------- */
+
+.preflop-grid {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 1px;
+  background-color: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+
+  /* Ensure grid doesn't overflow on small screens */
+  width: 100%;
+  max-width: 100%;
+}
+
+.grid-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  padding: 1px;
+  border: none;
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  overflow: hidden;
+}
+
+/* Hand name label inside each cell */
+.grid-cell__name {
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Non-color strength indicator (text-based, below the hand name) */
+.grid-cell__indicator {
+  font-size: 0.4rem;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Strength-category coloring */
+.grid-cell--premium {
+  background-color: var(--color-premium);
+  color: var(--color-premium-text);
+}
+.grid-cell--strong {
+  background-color: var(--color-strong);
+  color: var(--color-strong-text);
+}
+.grid-cell--playable {
+  background-color: var(--color-playable);
+  color: var(--color-playable-text);
+}
+.grid-cell--marginal {
+  background-color: var(--color-marginal);
+  color: var(--color-marginal-text);
+}
+.grid-cell--fold {
+  background-color: var(--color-fold);
+  color: var(--color-fold-text);
+}
+
+/* Dimmed state: hand is not recommended at the selected position */
+.grid-cell--dimmed {
+  opacity: 0.3;
+}
+
+/* Selected/inspected cell */
+.grid-cell--selected {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.grid-cell:hover {
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+.grid-cell:active {
+  transform: scale(0.95);
+}
+
+/* -- Hand detail display ------------------------------------------- */
+
+.hand-detail {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: var(--space-sm) var(--space-md);
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+}
+
+.hand-detail__text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* -- Card selection (shared between old odds calc and new advisor) -- */
+
+.card-selection {
+  margin-bottom: var(--space-md);
+}
+
+.card-selection__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+.card-selection__slots {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+/* Placeholder slot for a card not yet selected */
+.card-slot {
+  width: 50px;
+  height: 70px;
+  border: 2px dashed var(--color-border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-surface);
+}
+
+/* Filled card slot */
+.card-slot--filled {
+  border-style: solid;
+  border-color: var(--color-accent);
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+/* -- Drag-and-drop feedback classes -------------------------------- */
+
+/* Highlight a card slot when a card is dragged over it */
+.card-slot--drag-over {
+  border-color: var(--color-focus-ring);
+  background-color: rgba(83, 168, 255, 0.15);
+  border-style: solid;
+}
+
+/* Reduce opacity on the source card while it is being dragged */
+.card-picker__card--dragging {
+  opacity: 0.3;
+}
+
+/* Draggable cursor for picker cards */
+.card-picker__card[draggable="true"] {
+  cursor: grab;
+}
+
+.card-picker__card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* -- Card picker grid --------------------------------------------- */
+
+.card-picker {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 2px;
+  margin-bottom: var(--space-md);
+}
+
+.card-picker__card {
+  min-height: var(--touch-min);
+  min-width: 0;
+  aspect-ratio: 5 / 7;
+  padding: var(--space-xs) 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-picker__card:hover:not(:disabled) {
+  background-color: var(--color-bg-elevated);
+}
+
+.card-picker__card--selected {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.card-picker__card:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* Suit-colored rank text */
+.card-picker__card--clubs { color: var(--color-suit-clubs); }
+.card-picker__card--diamonds { color: var(--color-suit-diamonds); }
+.card-picker__card--hearts { color: var(--color-suit-hearts); }
+.card-picker__card--spades { color: var(--color-suit-spades); }
+
+.card-picker__card--selected.card-picker__card--clubs,
+.card-picker__card--selected.card-picker__card--diamonds,
+.card-picker__card--selected.card-picker__card--hearts,
+.card-picker__card--selected.card-picker__card--spades {
+  color: #fff;
+}
+
+/* -- Odds results ------------------------------------------------- */
+
+.odds-results {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  text-align: center;
+}
+
+.odds-results__prompt {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.odds-results__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.odds-results__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.odds-results__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.odds-results__label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Progress bar during calculation */
+.odds-progress {
+  width: 100%;
+  height: 4px;
+  background-color: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.odds-progress__bar {
+  height: 100%;
+  background-color: var(--color-accent);
+  transition: width 0.2s ease;
+  width: 0%;
+}
+
+.clear-button {
+  min-height: 0;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.clear-button:hover {
+  background-color: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+/* -- Card slot grouping (advisor) ---------------------------------- */
+
+.advisor-card-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.card-slot-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.card-slot-group__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Visual separator between hole cards and community cards */
+.card-slot-group__separator {
+  width: 1px;
+  height: 56px;
+  background-color: var(--color-border);
+  margin: 0 var(--space-xs);
+  align-self: flex-end;
+}
+
+/* -- Opponent count dropdown -------------------------------------- */
+
+.opponent-select {
+  min-height: 36px;
+  min-width: 48px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.opponent-select:focus {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* -- Advisor draws area -------------------------------------------- */
+
+.advisor-draws-area {
+  margin-bottom: var(--space-md);
+}
+
+/* Made hand display -- prominent text above the draws list */
+.advisor-made-hand {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+/* Compact draw items -- inline list, not a wide table */
+.advisor-draws-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.advisor-draw-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-bg-surface);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+}
+
+.advisor-draw-item__name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.advisor-draw-item__outs {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+}
+
+.advisor-draw-item__prob {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+/* No draws detected message */
+.advisor-draws-area__empty {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+/* Total outs summary */
+.advisor-total-outs {
+  margin-top: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.advisor-total-outs__count {
+  font-family: var(--font-mono);
+  color: var(--color-accent);
+}
+
+/* -- Advisor equity area ------------------------------------------- */
+
+.advisor-equity-area {
+  margin-bottom: var(--space-md);
+}
+
+/* -- Advisor pot odds area ----------------------------------------- */
+
+/* -- Advisor picker + control panel wrapper ------------------------ */
+
+.advisor-picker-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+/* Remove default margin on children; the flex gap handles spacing */
+.advisor-picker-controls .card-picker {
+  margin-bottom: 0;
+}
+
+
+/* -- Advisor control panel (opponents, pot, bet + quick buttons) --- */
+
+.advisor-control-panel {
+  width: 100%;
+}
+
+.control-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.control-panel__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.advisor-control-panel .opponent-select {
+  width: 100%;
+}
+
+.control-panel__input {
+  min-height: var(--touch-min);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  width: 100%;
+}
+
+.control-panel__input:focus {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Quick-add/subtract button row */
+.control-panel__quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Base quick button style */
+.quick-btn {
+  min-height: 36px;
+  min-width: 36px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  flex: 1 1 0;
+  text-align: center;
+}
+
+.quick-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-elevated);
+}
+
+.quick-btn:active {
+  transform: scale(0.95);
+}
+
+/* Add variant: subtle green tint on hover */
+.quick-btn--add:hover {
+  border-color: var(--color-call);
+  color: var(--color-call);
+}
+
+/* Subtract variant: subtle red tint on hover */
+.quick-btn--subtract:hover {
+  border-color: var(--color-fold-rec);
+  color: var(--color-fold-rec);
+}
+
+/* Reset button: visually distinct from +/- */
+.reset-btn {
+  min-height: 36px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background-color: var(--color-bg);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  width: 100%;
+  text-align: center;
+}
+
+.reset-btn:hover {
+  background-color: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+/* -- Advisor recommendation display -------------------------------- */
+
+.advisor-recommendation-area {
+  margin-bottom: var(--space-md);
+}
+
+.advisor-recommendation {
+  padding: var(--space-md);
+  border-radius: 6px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: center;
+  background-color: var(--color-bg-elevated);
+  border: 2px solid transparent;
+}
+
+.advisor-recommendation--raise {
+  color: var(--color-call);
+  border-color: var(--color-call);
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.advisor-recommendation--call {
+  color: #42a5f5;
+  border-color: #42a5f5;
+  background-color: rgba(66, 165, 245, 0.1);
+}
+
+.advisor-recommendation--fold {
+  color: var(--color-fold-rec);
+  border-color: var(--color-fold-rec);
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.advisor-recommendation--marginal {
+  color: var(--color-marginal-rec);
+  border-color: var(--color-marginal-rec);
+  background-color: rgba(255, 179, 0, 0.1);
+}
+
+.advisor-recommendation__verdict {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+}
+
+.advisor-recommendation__details {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.pot-odds-info {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* -- Validation message (shared) ----------------------------------- */
+
+.validation-message {
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  margin-top: var(--space-xs);
+}
+
+/* -- App footer ---------------------------------------------------- */
+
+.app-footer {
+  padding: var(--space-md);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
+.app-footer p {
+  margin: 0;
+}
+
+/* -- Advisor card area buttons row --------------------------------- */
+
+.advisor-card-area__buttons {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+/* -- Preflop Table button ----------------------------------------- */
+
+.preflop-table-btn {
+  min-height: 0;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-accent);
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--color-accent);
+  font-family: var(--font-family);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.preflop-table-btn:hover {
+  background-color: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+/* -- Preflop popup overlay ---------------------------------------- */
+
+.preflop-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+.preflop-popup {
+  max-width: 700px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.preflop-popup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.preflop-popup__title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.preflop-popup__close {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.preflop-popup__close:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-surface);
+}
+
+/* -- Preflop recommendation row in rec-table ---------------------- */
+
+.rec-table__row--preflop {
+  background-color: var(--color-bg-surface);
+  border-left: 3px solid var(--color-accent);
+  font-size: 0.875rem;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.rec-table__row--preflop .rec-table__cell--name {
+  flex: 1 1 auto;
+}
+
+/* ===================================================================
+   Responsive breakpoints (min-width, mobile-first)
+   =================================================================== */
+
+/* -- 480px: larger phones in landscape ----------------------------- */
+@media (min-width: 480px) {
+  body {
+    font-size: 0.9375rem;
+  }
+
+  .app-title {
+    font-size: 1.5rem;
+  }
+
+  .tool-title {
+    font-size: 1.25rem;
+  }
+
+  .grid-cell {
+    font-size: 0.5625rem;
+  }
+
+  .grid-cell__indicator {
+    font-size: 0.45rem;
+  }
+
+  .card-picker {
+    gap: 3px;
+  }
+
+  .card-picker__card {
+    font-size: 0.6875rem;
+    padding: var(--space-xs) 3px;
+  }
+
+  /* Position description list can breathe at wider viewports */
+  .position-description-list {
+    gap: var(--space-xs) var(--space-lg);
+  }
+
+  /* Rec table improvement rows: allow cells to flow horizontally */
+  .rec-table__row--improvement .rec-table__cell--name,
+  .rec-table__row--total .rec-table__cell--name {
+    flex: 0 1 auto;
+  }
+}
+
+/* -- 768px: tablets ------------------------------------------------ */
+@media (min-width: 768px) {
+  .main-content {
+    padding: 0;
+  }
+
+  .section-content {
+    padding: var(--space-lg);
+  }
+
+  .tool-title {
+    font-size: 1.375rem;
+  }
+
+  .tool-description {
+    font-size: 0.875rem;
+  }
+
+  /* Grid cells get larger -- more readable */
+  .grid-cell {
+    font-size: 0.6875rem;
+  }
+
+  .grid-cell__indicator {
+    font-size: 0.5rem;
+  }
+
+  .preflop-grid {
+    gap: 2px;
+    max-width: 560px;
+  }
+
+  .card-picker {
+    gap: 4px;
+    max-width: 600px;
+  }
+
+  .card-picker__card {
+    font-size: 0.75rem;
+    min-height: 56px;
+  }
+
+  /* Odds results values get larger */
+  .odds-results__value {
+    font-size: 2rem;
+  }
+
+  /* Advisor draws list can go horizontal at wider viewports */
+  .advisor-draws-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .advisor-draw-item {
+    flex: 0 1 auto;
+  }
+
+  /* Two-column layout: card picker left, control panel right */
+  .advisor-picker-controls {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .advisor-picker-controls .card-picker {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    order: 1;
+  }
+
+  .advisor-control-panel {
+    width: 240px;
+    flex: 0 0 240px;
+    order: 2;
+  }
+
+}
+
+/* -- 1024px: desktops --------------------------------------------- */
+@media (min-width: 1024px) {
+  .app-header {
+    padding: var(--space-md) var(--space-xl);
+    text-align: left;
+  }
+
+  .app-title {
+    font-size: 1.75rem;
+  }
+
+  .section-content {
+    padding: var(--space-xl);
+  }
+
+  .main-content {
+    padding: 0;
+  }
+
+  .tool-title {
+    font-size: 1.5rem;
+  }
+
+  /* Preflop grid at comfortable desktop size */
+  .preflop-grid {
+    max-width: 650px;
+    gap: 2px;
+  }
+
+  .grid-cell {
+    font-size: 0.8125rem;
+  }
+
+  .grid-cell__indicator {
+    font-size: 0.5625rem;
+  }
+
+  /* Card picker comfortable at desktop */
+  .card-picker {
+    max-width: 700px;
+    gap: 4px;
+  }
+
+  .card-picker__card {
+    font-size: 0.875rem;
+    min-height: 52px;
+  }
+
+  .card-slot {
+    width: 56px;
+    height: 72px;
+    font-size: 0.875rem;
+  }
+
+  .odds-results__value {
+    font-size: 2.5rem;
+  }
+
+  /* Advisor compact layout at desktop */
+  .advisor-card-area {
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .card-slot-group__label {
+    font-size: 0.625rem;
+  }
+
+  .advisor-draws-area {
+    margin-bottom: var(--space-sm);
+  }
+
+  .advisor-made-hand {
+    font-size: 0.875rem;
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-xs);
+  }
+
+  .advisor-draw-item {
+    font-size: 0.75rem;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .advisor-equity-area {
+    margin-bottom: var(--space-sm);
+  }
+
+  .advisor-recommendation {
+    padding: var(--space-sm);
+    font-size: 1rem;
+  }
+
+  .advisor-recommendation__verdict {
+    font-size: 1.25rem;
+  }
+
+  .advisor-recommendation-area {
+    margin-bottom: var(--space-sm);
+  }
+
+  /* Control panel compact overrides at desktop */
+  .advisor-picker-controls {
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .advisor-control-panel {
+    width: 220px;
+    flex: 0 0 220px;
+  }
+
+  .control-panel__input {
+    min-height: 36px;
+    font-size: 1.125rem;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .control-panel__group {
+    margin-bottom: var(--space-xs);
+  }
+
+  .quick-btn {
+    min-height: 28px;
+    font-size: 0.6875rem;
+    padding: 2px var(--space-xs);
+  }
+
+  .reset-btn {
+    min-height: 28px;
+    font-size: 0.6875rem;
+    padding: 2px var(--space-xs);
+  }
+}
+
+/* -- Recommendation table ------------------------------------------ */
+
+.rec-table {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rec-table__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rec-table__row:last-child {
+  border-bottom: none;
+}
+
+.rec-table__row--made-hand {
+  font-weight: 700;
+  background-color: var(--color-bg-elevated);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.rec-table__row--improvement {
+  font-size: 0.8125rem;
+}
+
+.rec-table__row--total {
+  font-weight: 700;
+  border-top: 2px solid var(--color-accent);
+  font-size: 0.8125rem;
+}
+
+.rec-table__cell {
+  flex: 0 0 auto;
+}
+
+.rec-table__cell--name {
+  flex: 1 1 100%;
+  color: var(--color-text-primary);
+  min-width: 0;
+}
+
+.rec-table__cell--equity {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+}
+
+.rec-table__cell--opp {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.rec-table__cell--outs {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+}
+
+.rec-table__cell--hit {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+.rec-table__cell--wih {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.rec-table__cell--adj {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.rec-table__cell--verdict {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Pot odds info inside verdict cell */
+.rec-table__pot-odds {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Probability color classes */
+.prob-green { color: var(--color-call); }
+.prob-yellow { color: var(--color-marginal-rec); }
+.prob-red { color: var(--color-fold-rec); }
+
+/* Verdict badge styles */
+.verdict-badge {
+  display: inline-block;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.verdict-raise {
+  color: #fff;
+  background-color: var(--color-call);
+}
+
+.verdict-call {
+  color: #fff;
+  background-color: #42a5f5;
+}
+
+.verdict-fold {
+  color: #fff;
+  background-color: var(--color-fold-rec);
+}
+
+/* Win/tie/loss expandable detail */
+.rec-table__detail {
+  width: 100%;
+}
+
+.rec-table__detail-toggle {
+  font-size: 0.75rem;
+  font-weight: 400;
+  padding: var(--space-xs) 0;
+  margin: 0;
+}
+
+.rec-table__detail-content {
+  padding: var(--space-xs) 0;
+}
+
+.rec-table__detail-text {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* -- Compact mobile overrides for recommendation table (320px base) --- */
+
+@media (max-width: 374px) {
+  .rec-table__row {
+    padding: var(--space-xs) var(--space-sm);
+    gap: 2px var(--space-xs);
+  }
+
+  .rec-table__cell--equity {
+    font-size: 0.875rem;
+  }
+
+  .rec-table__row--improvement,
+  .rec-table__row--total {
+    font-size: 0.75rem;
+  }
+
+  .rec-table__cell--outs,
+  .rec-table__cell--adj {
+    font-size: 0.75rem;
+  }
+
+  .verdict-badge {
+    font-size: 0.625rem;
+    padding: 1px var(--space-xs);
+  }
+
+  /* Compact preflop button and position filters at narrow viewports */
+  .preflop-table-btn {
+    font-size: 0.6875rem;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .position-button {
+    font-size: 0.6875rem;
+    padding: var(--space-xs) var(--space-xs);
+    min-width: 0;
+  }
+
+  .advisor-card-area__buttons {
+    gap: var(--space-xs);
+  }
+
+  /* Popup near-full-screen on narrow viewports */
+  .preflop-popup {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: 4px;
+    padding: var(--space-sm);
+  }
+}
+
+/* -- 375px-479px: standard mobile ------------------------------------- */
+
+@media (min-width: 375px) and (max-width: 479px) {
+  .rec-table__row--improvement .rec-table__cell--name {
+    flex: 1 1 100%;
+  }
+}
+
+/* ===================================================================
+   Utility classes
+   =================================================================== */
+
+/* Screen-reader-only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Hide visually but keep in DOM for state preservation */
+.visually-hidden {
+  display: none;
+}

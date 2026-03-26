@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Poker Helper — preflop charts and a unified advisor in one lightweight tool.">
+  <title>Poker Helper</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <main class="main-content">
+
+    <div class="tool-section">
+      <h2 class="tool-heading">Poker Advisor</h2>
+      <p class="tool-description">
+        Select a table position, then pick your hole cards and community cards
+        below. The advisor will automatically detect draws, calculate equity,
+        and -- when you enter pot and bet sizes -- give you a call or fold
+        recommendation. Use the Preflop Table button to view the full starting
+        hand chart.
+      </p>
+
+      <!-- Position filter buttons -->
+      <div class="position-filters" role="group" aria-label="Table position filter">
+        <button class="position-button position-button--active" data-position="blinds" aria-pressed="true">Blinds (SB/BB)</button>
+        <button class="position-button" data-position="early" aria-pressed="false">UTG (Early)</button>
+        <button class="position-button" data-position="middle" aria-pressed="false">Middle</button>
+        <button class="position-button" data-position="late" aria-pressed="false">Cutoff/BTN</button>
+      </div>
+
+      <div class="postflop-advisor">
+
+        <!-- Card slot area: grouped as Hole Cards, Flop, Turn, River -->
+        <div class="advisor-card-area">
+          <div class="card-slot-group card-slot-group--hole">
+            <span class="card-slot-group__label">Your Hole Cards</span>
+            <div class="card-selection__slots" aria-label="Hole card slots">
+              <!-- 2 hole card slots -- populated by postflop-advisor.js -->
+            </div>
+          </div>
+
+          <div class="card-slot-group__separator" aria-hidden="true"></div>
+
+          <div class="card-slot-group card-slot-group--flop">
+            <span class="card-slot-group__label">Flop</span>
+            <div class="card-selection__slots" aria-label="Flop card slots">
+              <!-- 3 flop slots -- populated by postflop-advisor.js -->
+            </div>
+          </div>
+
+          <div class="card-slot-group card-slot-group--turn">
+            <span class="card-slot-group__label">Turn</span>
+            <div class="card-selection__slots" aria-label="Turn card slot">
+              <!-- 1 turn slot -- populated by postflop-advisor.js -->
+            </div>
+          </div>
+
+          <div class="card-slot-group card-slot-group--river">
+            <span class="card-slot-group__label">River</span>
+            <div class="card-selection__slots" aria-label="River card slot">
+              <!-- 1 river slot -- populated by postflop-advisor.js -->
+            </div>
+          </div>
+
+          <div class="advisor-card-area__buttons">
+            <button class="clear-button" type="button">Clear All</button>
+            <button class="preflop-table-btn" type="button">Preflop Table</button>
+          </div>
+        </div>
+
+        <!-- Card picker + control panel wrapper (two-column at 768px+) -->
+        <div class="advisor-picker-controls">
+          <!-- Card picker grid -- populated by postflop-advisor.js -->
+          <div class="card-picker" aria-label="Card picker">
+            <!-- 52 card buttons built by postflop-advisor.js -->
+          </div>
+
+          <!-- Right-side control panel: opponents, pot, bet (rendered by JS) -->
+          <div class="advisor-control-panel" aria-label="Betting controls">
+            <!-- Opponent selector + pot/bet inputs + quick buttons rendered by postflop-advisor.js -->
+          </div>
+        </div>
+
+        <!-- Draws and made-hand results area -->
+        <div class="advisor-draws-area" aria-live="polite" aria-atomic="true">
+          <!-- Made hand + detected draws rendered by postflop-advisor.js -->
+        </div>
+
+        <!-- Equity results area -->
+        <div class="advisor-equity-area" aria-live="polite" aria-atomic="true">
+          <!-- Win/tie/loss rendered by postflop-advisor.js -->
+        </div>
+
+        <!-- Call/fold recommendation -->
+        <div class="advisor-recommendation-area" aria-live="polite" aria-atomic="true">
+          <!-- Recommendation rendered by postflop-advisor.js -->
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Popup overlay for preflop chart -- populated by postflop-advisor.js (Wave 2) -->
+  <div class="preflop-popup-overlay" role="dialog" aria-modal="true" aria-label="Preflop starting hand chart" style="display:none"></div>
+
+<!-- Module scripts: app.js imports tool modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
