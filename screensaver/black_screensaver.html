@@ -1,5 +1,23 @@
 <html>
 <head></head>
-<body style="background-color: #000;">
+<body style="background-color: #000; margin: 0; cursor: none;">
+<script>
+function enterFullscreen() {
+    var el = document.documentElement;
+    try {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch (e) {}
+}
+
+document.addEventListener('click', enterFullscreen);
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        enterFullscreen();
+    }
+});
+</script>
 </body>
 </html>

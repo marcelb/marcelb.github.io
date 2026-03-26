@@ -381,16 +381,22 @@
         Renderer.canvas.height = Renderer.height;
       },
 
-      // Immediate resize: sizes canvas and clamps particles without delay.
+      // Recreates all particles for the current canvas dimensions.
+      resetParticles() {
+        Particle.pool.length = 0;
+        const count = Config.particleCount;
+        for (let i = 0; i < count; i++) {
+          Particle.pool.push(Particle.create(Renderer.width, Renderer.height));
+        }
+        Performance.adjustedCount = count;
+      },
+
+      // Immediate resize: sizes canvas and resets particles without delay.
       // Used for fullscreen changes where any delay leaves the canvas wrong-sized.
       resizeImmediate() {
         clearTimeout(Renderer.resizeTimeoutId);
         Renderer.sizeCanvas();
-
-        const pool = Particle.pool;
-        for (let i = 0; i < pool.length; i++) {
-          Particle.clampToCanvas(pool[i], Renderer.width, Renderer.height);
-        }
+        Renderer.resetParticles();
       },
 
       // Debounced resize handler (100ms) to avoid thrashing during window drag-resize.
@@ -398,12 +404,7 @@
         clearTimeout(Renderer.resizeTimeoutId);
         Renderer.resizeTimeoutId = setTimeout(function () {
           Renderer.sizeCanvas();
-
-          // Re-check that all particles are within the new bounds
-          const pool = Particle.pool;
-          for (let i = 0; i < pool.length; i++) {
-            Particle.clampToCanvas(pool[i], Renderer.width, Renderer.height);
-          }
+          Renderer.resetParticles();
         }, 100);
       },
 

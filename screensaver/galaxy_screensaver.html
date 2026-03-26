@@ -5,196 +5,388 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OLED Galaxy Screensaver</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            background: #000;
-            overflow: hidden;
-            cursor: none;
+            box-sizing: border-box;
         }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000000;
+        }
+
         canvas {
             display: block;
             background: #000;
+            cursor: none;
+        }
+
+        /* --- Settings overlay --- */
+        #settings-overlay {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 360px;
+            padding: 16px 18px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            color: #888888;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #settings-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #settings-overlay .settings-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #666666;
+            margin-bottom: 12px;
+        }
+
+        #settings-overlay .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        #settings-overlay .setting-row label {
+            flex: 0 0 auto;
+            margin-right: 10px;
+            color: #888888;
+        }
+
+        #settings-overlay .setting-row .setting-value {
+            width: 32px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: #777777;
+            font-size: 12px;
+        }
+
+        #settings-overlay input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1 1 auto;
+            height: 4px;
+            background: #333333;
+            border-radius: 2px;
+            outline: none;
+            margin: 0 8px;
+            cursor: pointer;
+        }
+
+        #settings-overlay input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #555555;
+            cursor: pointer;
+        }
+
+        #settings-overlay input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #555555;
+            border: none;
+            cursor: pointer;
+        }
+
+        #settings-overlay input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 18px;
+            background: #333333;
+            border-radius: 9px;
+            position: relative;
+            cursor: pointer;
+            outline: none;
+            flex-shrink: 0;
+        }
+
+        #settings-overlay input[type="checkbox"]::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #555555;
+            transition: transform 0.2s ease;
+        }
+
+        #settings-overlay input[type="checkbox"]:checked {
+            background: #444444;
+        }
+
+        #settings-overlay input[type="checkbox"]:checked::after {
+            transform: translateX(14px);
+            background: #888888;
+        }
+
+        #settings-overlay .fps-display {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #2a2a2a;
+            font-size: 11px;
+            color: #555555;
         }
     </style>
 </head>
 <body>
     <canvas id="galaxyCanvas"></canvas>
-    
+
+    <!-- Settings overlay markup -->
+    <div id="settings-overlay">
+        <div class="settings-title">Settings</div>
+
+        <div class="setting-row">
+            <label for="setting-galaxies">Galaxies</label>
+            <input type="range" id="setting-galaxies" min="1" max="10" step="1" value="5">
+            <span class="setting-value" id="val-galaxies">5</span>
+        </div>
+
+        <div class="setting-row">
+            <label for="setting-stars">Stars/Galaxy</label>
+            <input type="range" id="setting-stars" min="50" max="500" step="10" value="240">
+            <span class="setting-value" id="val-stars">240</span>
+        </div>
+
+        <div class="setting-row">
+            <label for="setting-speed">Speed</label>
+            <input type="range" id="setting-speed" min="1" max="3" step="1" value="1">
+            <span class="setting-value" id="val-speed">Slow</span>
+        </div>
+
+        <div class="setting-row">
+            <label for="setting-brightness">Brightness</label>
+            <input type="range" id="setting-brightness" min="20" max="60" step="1" value="40">
+            <span class="setting-value" id="val-brightness">40%</span>
+        </div>
+
+        <div class="setting-row">
+            <label for="setting-wanderers">Wanderers</label>
+            <input type="checkbox" id="setting-wanderers" checked>
+        </div>
+
+        <div class="fps-display">FPS: <span id="fps-value">--</span></div>
+    </div>
+
     <script>
+        'use strict';
+
+        // --- Config ---
+        const Config = {
+            galaxyCount: 5,
+            starsPerGalaxy: 240,
+            speedStep: 1,
+            speedMultiplier: 0.33,
+            maxBrightness: 40,
+            showWanderers: true
+        };
+
         const canvas = document.getElementById('galaxyCanvas');
         const ctx = canvas.getContext('2d');
-        
+
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
-        window.addEventListener('resize', () => {
+
+        // --- Resize ---
+        let resizeTimeoutId = 0;
+
+        function sizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+        }
+
+        function resetSimulation() {
+            sizeCanvas();
+            createGalaxies();
+            createWanderers();
+        }
+
+        function resizeImmediate() {
+            clearTimeout(resizeTimeoutId);
+            resetSimulation();
+        }
+
+        window.addEventListener('resize', function () {
+            clearTimeout(resizeTimeoutId);
+            resizeTimeoutId = setTimeout(resetSimulation, 100);
         });
 
+        // --- Star ---
         class Star {
-            constructor(galaxyX, galaxyY, distance, angle, color, brightness = 1) {
+            constructor(galaxyX, galaxyY, distance, angle, color, brightness) {
+                if (brightness === undefined) brightness = 1;
                 this.galaxyX = galaxyX;
                 this.galaxyY = galaxyY;
                 this.distance = distance;
                 this.originalDistance = distance;
                 this.originalAngle = angle;
                 this.angle = angle;
-                this.angularSpeed = 0.16 / Math.sqrt(distance);
+                this.angularSpeed = distance > 0 ? 0.16 / Math.sqrt(distance) : 0;
                 this.color = color;
                 this.brightness = brightness;
                 this.size = Math.random() * 1.6 + 0.4;
                 this.mass = this.size * 1.0;
-                
-                // Recovery tracking
+
                 this.isRecovering = false;
                 this.recoveryStartTime = 0;
                 this.disturbedDistance = distance;
                 this.disturbedAngle = angle;
-                
+
                 this.updatePosition();
             }
-            
+
             updatePosition() {
                 this.x = this.galaxyX + Math.cos(this.angle) * this.distance;
                 this.y = this.galaxyY + Math.sin(this.angle) * this.distance;
-                
+
                 this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
                 this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
             }
-            
-            update(newGalaxyX, newGalaxyY, otherGalaxies = [], wanderers = []) {
+
+            update(newGalaxyX, newGalaxyY, allGalaxies, selfGalaxyIndex) {
                 this.galaxyX = newGalaxyX;
                 this.galaxyY = newGalaxyY;
-                
-                // Update orbital motion
-                this.angle += this.angularSpeed;
-                
-                // Calculate base orbital position
+                this.angle += this.angularSpeed * Config.speedMultiplier;
                 const baseX = Math.cos(this.angle) * this.distance;
                 const baseY = Math.sin(this.angle) * this.distance;
-                
+
                 let totalForceX = 0;
                 let totalForceY = 0;
-                
                 const currentX = this.galaxyX + baseX;
                 const currentY = this.galaxyY + baseY;
-                
-                // Gravitational interactions with other galaxies
-                for (let i = 0; i < otherGalaxies.length; i++) {
-                    const otherGalaxy = otherGalaxies[i];
+
+                for (let i = 0; i < allGalaxies.length; i++) {
+                    if (i === selfGalaxyIndex) continue;
+                    const otherGalaxy = allGalaxies[i];
                     const galaxyDx = otherGalaxy.x - this.galaxyX;
                     const galaxyDy = otherGalaxy.y - this.galaxyY;
                     const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
-                    
-                    if (galaxyDistSq < 360000) { // 600px range for galaxy check
-                        // Interact with center star (strongest gravitational source)
+
+                    if (galaxyDistSq < 360000) {
                         const centerDx = otherGalaxy.centerStar.x - currentX;
                         const centerDy = otherGalaxy.centerStar.y - currentY;
                         const centerDistSq = centerDx * centerDx + centerDy * centerDy;
-                        
-                        if (centerDistSq > 100 && centerDistSq < 360000) { // 600px range
+
+                        if (centerDistSq > 100 && centerDistSq < 360000) {
                             const centerDistance = Math.sqrt(centerDistSq);
                             const centerForce = (this.mass * 12.5) / (centerDistSq + 50);
                             const clampedForce = Math.min(centerForce, 0.1);
-                            
                             totalForceX += (centerDx / centerDistance) * clampedForce;
                             totalForceY += (centerDy / centerDistance) * clampedForce;
                         }
-                        
-                        // Interact with individual stars from other galaxy
-                        for (let j = 0; j < otherGalaxy.stars.length; j += 2) { // Every 2nd star for better interaction
+
+                        for (let j = 0; j < otherGalaxy.stars.length; j += 2) {
                             const otherStar = otherGalaxy.stars[j];
                             const dx = otherStar.x - currentX;
                             const dy = otherStar.y - currentY;
                             const distSq = dx * dx + dy * dy;
-                            
-                            if (distSq > 50 && distSq < 160000) { // 400px range
+
+                            if (distSq > 50 && distSq < 160000) {
                                 const distance = Math.sqrt(distSq);
                                 const force = (this.mass * otherStar.mass * 3.0) / (distSq + 100);
                                 const clampedForce = Math.min(force, 0.06);
-                                
                                 totalForceX += (dx / distance) * clampedForce;
                                 totalForceY += (dy / distance) * clampedForce;
                             }
                         }
                     }
                 }
-                
-                // Apply gravitational forces to modify position (tidal effects)
+
                 const forceMultiplier = 20;
                 const gravitationalX = totalForceX * forceMultiplier;
                 const gravitationalY = totalForceY * forceMultiplier;
-                
-                // Calculate actual position with gravitational displacement
+
                 this.x = this.galaxyX + baseX + gravitationalX;
                 this.y = this.galaxyY + baseY + gravitationalY;
-                
-                // Modify orbital parameters based on gravitational influence
+
                 const forceStrength = Math.sqrt(totalForceX * totalForceX + totalForceY * totalForceY);
-                
-                // Orbital velocity changes due to gravitational perturbation
+
                 if (forceStrength > 0.001) {
-                    // Gravitational forces can speed up or slow down orbital motion
                     const forceAngle = Math.atan2(totalForceY, totalForceX);
                     const currentAngle = Math.atan2(baseY, baseX);
                     const angleDiff = forceAngle - currentAngle;
-                    
-                    // Tangential component affects orbital speed
                     const tangentialComponent = Math.sin(angleDiff) * forceStrength;
-                    this.angularSpeed += tangentialComponent * 0.0005; // Modify orbital velocity
-                    
-                    // Radial component affects orbital distance
+                    this.angularSpeed += tangentialComponent * 0.0005;
                     const radialComponent = Math.cos(angleDiff) * forceStrength;
-                    this.distance += radialComponent * 7.5; // Tidal stretching/compression
+                    this.distance += radialComponent * 7.5;
                 }
-                
-                // Recovery system - check if isolated
+
                 let hasNearbyGalaxy = false;
-                for (let i = 0; i < otherGalaxies.length; i++) {
-                    const otherGalaxy = otherGalaxies[i];
+                for (let i = 0; i < allGalaxies.length; i++) {
+                    if (i === selfGalaxyIndex) continue;
+                    const otherGalaxy = allGalaxies[i];
                     const galaxyDx = otherGalaxy.x - this.galaxyX;
                     const galaxyDy = otherGalaxy.y - this.galaxyY;
                     const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
-                    if (galaxyDistSq < 360000) { // 600px isolation threshold
+                    if (galaxyDistSq < 360000) {
                         hasNearbyGalaxy = true;
                         break;
                     }
                 }
-                
+
                 if (!hasNearbyGalaxy && forceStrength < 0.001) {
-                    // Gradual recovery to original orbital parameters
                     const recoveryRate = 0.006;
                     const distanceDiff = this.originalDistance - this.distance;
-                    const angleDiff = this.originalAngle - this.angle;
                     const speedDiff = (0.16 / Math.sqrt(this.originalDistance)) - this.angularSpeed;
-                    
                     this.distance += distanceDiff * recoveryRate;
                     this.angularSpeed += speedDiff * recoveryRate * 0.1;
                 }
-                
-                // Bounds enforcement
+
                 this.distance = Math.max(3, Math.min(this.distance, 400));
                 this.angularSpeed = Math.max(-0.05, Math.min(this.angularSpeed, 0.05));
-                
+
                 this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
                 this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
             }
-            
+
             draw() {
-                ctx.save();
-                ctx.globalAlpha = this.brightness;
-                ctx.fillStyle = this.color;
-                ctx.shadowBlur = this.size * 2;
-                ctx.shadowColor = this.color;
+                const alpha = this.brightness * (Config.maxBrightness / 100);
+                const glowRadius = this.size * 3;
+                const hex = this.color;
+                // Parse hex to r,g,b for gradient alpha stops
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, glowRadius);
+                grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')');
+                grad.addColorStop(0.4, 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha * 0.6) + ')');
+                grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+                ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.restore();
+                // Solid 1px core
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(this.x - 0.5, this.y - 0.5, 1, 1);
+                ctx.globalAlpha = 1.0;
             }
         }
 
+        // --- Galaxy ---
         class Galaxy {
             constructor(x, y, baseHue) {
                 this.x = x;
@@ -204,34 +396,31 @@
                 this.baseHue = baseHue;
                 this.color = this.hslToHex(baseHue, 70, 60);
                 this.stars = [];
-                
+
                 const centerColor = this.hslToHex(baseHue, 80, 80);
                 this.centerStar = new Star(x, y, 0, 0, centerColor, 1);
                 this.centerStar.size = 3.0;
                 this.centerStar.mass = 5.0;
-                
-                for (let i = 0; i < 240; i++) {
+
+                for (let i = 0; i < Config.starsPerGalaxy; i++) {
                     const angle = Math.random() * Math.PI * 2;
                     const centerWeight = Math.pow(Math.random(), 2.5);
-                    const distance = 8 + centerWeight * 140; // Larger galaxy size
+                    const distance = 8 + centerWeight * 140;
                     const angleVariation = (Math.random() - 0.5) * 0.5;
                     const distanceVariation = (Math.random() - 0.5) * 10;
                     const finalAngle = angle + angleVariation;
                     const finalDistance = Math.max(5, distance + distanceVariation);
-                    
-                    const brightness = Math.max(0.2, 0.9 - (finalDistance / 150)); // Adjust for larger size
-                    
+                    const brightness = Math.max(0.2, 0.9 - (finalDistance / 150));
                     const hueVariation = (Math.random() - 0.5) * 60;
                     const starHue = (baseHue + hueVariation + 360) % 360;
                     const saturationVariation = 50 + Math.random() * 40;
                     const lightnessVariation = 40 + Math.random() * 30;
                     const starColor = this.hslToHex(starHue, saturationVariation, lightnessVariation);
-                    
                     const star = new Star(x, y, finalDistance, finalAngle, starColor, brightness);
                     this.stars.push(star);
                 }
             }
-            
+
             hslToHex(h, s, l) {
                 l /= 100;
                 const a = s * Math.min(l, 1 - l) / 100;
@@ -242,54 +431,51 @@
                 };
                 return `#${f(0)}${f(8)}${f(4)}`;
             }
-            
-            update(otherGalaxies = [], wanderers = []) {
-                // Add slight repulsion between galaxy centers
+
+            update(allGalaxies, selfIndex, wanderers) {
                 let repulsionX = 0;
                 let repulsionY = 0;
-                
-                for (let i = 0; i < otherGalaxies.length; i++) {
-                    const otherGalaxy = otherGalaxies[i];
-                    const dx = this.x - otherGalaxy.x; // Direction away from other galaxy
+
+                for (let i = 0; i < allGalaxies.length; i++) {
+                    if (i === selfIndex) continue;
+                    const otherGalaxy = allGalaxies[i];
+                    const dx = this.x - otherGalaxy.x;
                     const dy = this.y - otherGalaxy.y;
                     const distSq = dx * dx + dy * dy;
-                    
-                    if (distSq > 0 && distSq < 360000) { // 600px repulsion range
+
+                    if (distSq > 0 && distSq < 360000) {
                         const distance = Math.sqrt(distSq);
-                        const repulsion = 200 / (distSq + 100); // Even weaker repulsive force (1/4 of original)
-                        const maxRepulsion = 0.00075; // Much more subtle (1/4 of original)
+                        const repulsion = 200 / (distSq + 100);
+                        const maxRepulsion = 0.00075;
                         const clampedRepulsion = Math.min(repulsion, maxRepulsion);
-                        
                         repulsionX += (dx / distance) * clampedRepulsion;
                         repulsionY += (dy / distance) * clampedRepulsion;
                     }
                 }
-                
-                // Apply repulsion to velocity (gradual course change)
+
                 this.vx += repulsionX;
                 this.vy += repulsionY;
-                
-                // Limit maximum velocity to prevent runaway
+
                 const maxVelocity = 2.5;
                 const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
                 if (currentSpeed > maxVelocity) {
                     this.vx = (this.vx / currentSpeed) * maxVelocity;
                     this.vy = (this.vy / currentSpeed) * maxVelocity;
                 }
-                
-                this.x += this.vx;
-                this.y += this.vy;
-                
+
+                this.x += this.vx * Config.speedMultiplier;
+                this.y += this.vy * Config.speedMultiplier;
+
                 this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
                 this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
-                
-                this.centerStar.update(this.x, this.y, otherGalaxies, wanderers);
-                
+
+                this.centerStar.update(this.x, this.y, allGalaxies, selfIndex);
+
                 for (let i = 0; i < this.stars.length; i++) {
-                    this.stars[i].update(this.x, this.y, otherGalaxies, wanderers);
+                    this.stars[i].update(this.x, this.y, allGalaxies, selfIndex);
                 }
             }
-            
+
             draw() {
                 this.centerStar.draw();
                 for (let i = 0; i < this.stars.length; i++) {
@@ -298,142 +484,429 @@
             }
         }
 
-        const baseHues = [0, 72, 144, 216, 288];
-        const galaxies = [];
-        const wandererStars = [];
-        
-        for (let i = 0; i < 5; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const baseHue = baseHues[i];
-            galaxies.push(new Galaxy(x, y, baseHue));
-        }
-        
-        // Create wandering stars
+        // --- WandererStar ---
         class WandererStar {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
                 this.vx = (Math.random() - 0.5) * 0.4;
                 this.vy = (Math.random() - 0.5) * 0.4;
-                this.color = '#888888'; // Brighter gray
-                this.brightness = Math.random() * 0.4 + 0.3; // Much brighter: 0.3-0.7
-                this.size = Math.random() * 1.2 + 0.8; // Larger: 0.8-2.0
+                this.color = '#888888';
+                this.brightness = Math.random() * 0.4 + 0.3;
+                this.size = Math.random() * 1.2 + 0.8;
                 this.mass = this.size * 0.3;
             }
-            
+
             update(galaxies) {
                 this.x += this.vx;
                 this.y += this.vy;
-                
-                // Interact with all galaxy stars and centers
                 let totalForceX = 0;
                 let totalForceY = 0;
-                
+
                 for (let i = 0; i < galaxies.length; i++) {
                     const galaxy = galaxies[i];
                     const galaxyDx = galaxy.x - this.x;
                     const galaxyDy = galaxy.y - this.y;
                     const galaxyDistSq = galaxyDx * galaxyDx + galaxyDy * galaxyDy;
-                    
-                    // Only interact if galaxy is nearby
-                    if (galaxyDistSq < 250000) { // 500px range
-                        // Interact with galaxy center star (strongest pull)
+
+                    if (galaxyDistSq < 250000) {
                         const centerDx = galaxy.centerStar.x - this.x;
                         const centerDy = galaxy.centerStar.y - this.y;
                         const centerDistSq = centerDx * centerDx + centerDy * centerDy;
-                        
+
                         if (centerDistSq > 100 && centerDistSq < 250000) {
                             const centerDistance = Math.sqrt(centerDistSq);
                             const centerForce = (this.mass * 5.0) / (centerDistSq + 25);
                             const clampedCenterForce = Math.min(centerForce, 0.02);
-                            
                             totalForceX += (centerDx / centerDistance) * clampedCenterForce;
                             totalForceY += (centerDy / centerDistance) * clampedCenterForce;
                         }
-                        
-                        // Interact with individual stars (every 3rd star for performance)
+
                         for (let j = 0; j < galaxy.stars.length; j += 3) {
                             const star = galaxy.stars[j];
                             const dx = star.x - this.x;
                             const dy = star.y - this.y;
                             const distSq = dx * dx + dy * dy;
-                            
-                            if (distSq > 25 && distSq < 160000) { // 400px range
+
+                            if (distSq > 25 && distSq < 160000) {
                                 const distance = Math.sqrt(distSq);
                                 const force = (this.mass * star.mass * 1.0) / (distSq + 25);
                                 const clampedForce = Math.min(force, 0.015);
-                                
                                 totalForceX += (dx / distance) * clampedForce;
                                 totalForceY += (dy / distance) * clampedForce;
                             }
                         }
                     }
                 }
-                
-                // Apply gravitational forces (stronger effect)
+
                 this.x += totalForceX * 5;
                 this.y += totalForceY * 5;
-                
+
                 this.x = ((this.x % canvas.width) + canvas.width) % canvas.width;
                 this.y = ((this.y % canvas.height) + canvas.height) % canvas.height;
             }
-            
+
             draw() {
-                ctx.save();
-                ctx.globalAlpha = this.brightness;
-                ctx.fillStyle = this.color;
-                ctx.shadowBlur = this.size * 2;
-                ctx.shadowColor = this.color;
+                const alpha = this.brightness * (Config.maxBrightness / 100);
+                const glowRadius = this.size * 3;
+                const hex = this.color;
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, glowRadius);
+                grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')');
+                grad.addColorStop(0.4, 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha * 0.6) + ')');
+                grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+                ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.restore();
+                // Solid 1px core
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(this.x - 0.5, this.y - 0.5, 1, 1);
+                ctx.globalAlpha = 1.0;
             }
-        }
-        
-        for (let i = 0; i < 60; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            wandererStars.push(new WandererStar(x, y));
         }
 
-        function animate() {
+        // --- State arrays ---
+        let galaxies = [];
+        let wandererStars = [];
+
+        function generateBaseHues(count) {
+            const hues = [];
+            for (let i = 0; i < count; i++) {
+                hues.push(Math.round((360 / count) * i));
+            }
+            return hues;
+        }
+
+        function createGalaxies() {
+            galaxies = [];
+            const hues = generateBaseHues(Config.galaxyCount);
+            for (let i = 0; i < Config.galaxyCount; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                galaxies.push(new Galaxy(x, y, hues[i]));
+            }
+        }
+
+        function createWanderers() {
+            wandererStars = [];
+            for (let i = 0; i < 60; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                wandererStars.push(new WandererStar(x, y));
+            }
+        }
+
+        // --- Fullscreen ---
+        const Fullscreen = {
+            init() {
+                canvas.addEventListener('click', Fullscreen.requestFullscreen);
+
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'f' || e.key === 'F') {
+                        e.preventDefault();
+                        Fullscreen.requestFullscreen();
+                    }
+                });
+
+                document.addEventListener('fullscreenchange', resizeImmediate);
+                document.addEventListener('webkitfullscreenchange', resizeImmediate);
+            },
+
+            requestFullscreen() {
+                const el = document.documentElement;
+                if (el.requestFullscreen) {
+                    el.requestFullscreen().catch(function () {});
+                } else if (el.webkitRequestFullscreen) {
+                    try {
+                        el.webkitRequestFullscreen();
+                    } catch (_ignored) {}
+                }
+            }
+        };
+
+        // --- Performance (FPS tracking) ---
+        const Performance = {
+            BUFFER_SIZE: 60,
+            buffer: new Float64Array(60),
+            bufferIndex: 0,
+            bufferFilled: false,
+            lastDisplayUpdate: 0,
+            currentFPS: 60,
+
+            recordFrame(timestamp) {
+                Performance.buffer[Performance.bufferIndex] = timestamp;
+                Performance.bufferIndex = (Performance.bufferIndex + 1) % Performance.BUFFER_SIZE;
+
+                if (!Performance.bufferFilled && Performance.bufferIndex === 0) {
+                    Performance.bufferFilled = true;
+                }
+
+                const sampleCount = Performance.bufferFilled ? Performance.BUFFER_SIZE : Performance.bufferIndex;
+                if (sampleCount < 2) return;
+
+                const oldestIndex = Performance.bufferFilled ? Performance.bufferIndex : 0;
+                const newestIndex = (Performance.bufferIndex - 1 + Performance.BUFFER_SIZE) % Performance.BUFFER_SIZE;
+                const oldestTime = Performance.buffer[oldestIndex];
+                const newestTime = Performance.buffer[newestIndex];
+                const elapsed = newestTime - oldestTime;
+
+                if (elapsed <= 0) return;
+
+                const fps = ((sampleCount - 1) / elapsed) * 1000;
+                Performance.currentFPS = fps;
+
+                if (timestamp - Performance.lastDisplayUpdate > 500) {
+                    Performance.lastDisplayUpdate = timestamp;
+                    Settings.updateFPSDisplay(Math.round(fps));
+                }
+            }
+        };
+
+        // --- Settings ---
+        const Settings = {
+            STORAGE_KEY: 'oled-galaxy-settings',
+            AUTO_HIDE_MS: 5000,
+            SPEED_LABELS: ['Slow', 'Medium', 'Fast'],
+            SPEED_VALUES: [0.33, 0.66, 1.0],
+
+            overlay: null,
+            hideTimerId: 0,
+            isVisible: false,
+
+            elGalaxies: null,
+            elStars: null,
+            elSpeed: null,
+            elBrightness: null,
+            elWanderers: null,
+            valGalaxies: null,
+            valStars: null,
+            valSpeed: null,
+            valBrightness: null,
+            fpsValue: null,
+
+            init() {
+                Settings.overlay = document.getElementById('settings-overlay');
+                Settings.elGalaxies = document.getElementById('setting-galaxies');
+                Settings.elStars = document.getElementById('setting-stars');
+                Settings.elSpeed = document.getElementById('setting-speed');
+                Settings.elBrightness = document.getElementById('setting-brightness');
+                Settings.elWanderers = document.getElementById('setting-wanderers');
+                Settings.valGalaxies = document.getElementById('val-galaxies');
+                Settings.valStars = document.getElementById('val-stars');
+                Settings.valSpeed = document.getElementById('val-speed');
+                Settings.valBrightness = document.getElementById('val-brightness');
+                Settings.fpsValue = document.getElementById('fps-value');
+
+                Settings.loadFromStorage();
+                Settings.syncUIFromConfig();
+
+                Settings.elGalaxies.addEventListener('input', Settings.onGalaxiesChange);
+                Settings.elStars.addEventListener('input', Settings.onStarsChange);
+                Settings.elSpeed.addEventListener('input', Settings.onSpeedChange);
+                Settings.elBrightness.addEventListener('input', Settings.onBrightnessChange);
+                Settings.elWanderers.addEventListener('change', Settings.onWanderersChange);
+
+                document.addEventListener('mousemove', Settings.onMouseMove, { passive: true });
+
+                Settings.overlay.addEventListener('mousemove', Settings.resetAutoHide, { passive: true });
+                Settings.overlay.addEventListener('input', Settings.resetAutoHide, { passive: true });
+
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 's' || e.key === 'S') {
+                        if (Settings.isVisible) {
+                            Settings.hide();
+                        } else {
+                            Settings.show();
+                        }
+                    }
+                });
+            },
+
+            show() {
+                Settings.isVisible = true;
+                Settings.overlay.classList.add('visible');
+                document.body.style.cursor = 'default';
+                Settings.startAutoHide();
+            },
+
+            hide() {
+                Settings.isVisible = false;
+                Settings.overlay.classList.remove('visible');
+                document.body.style.cursor = 'none';
+                clearTimeout(Settings.hideTimerId);
+                Settings.hideTimerId = 0;
+            },
+
+            startAutoHide() {
+                clearTimeout(Settings.hideTimerId);
+                Settings.hideTimerId = setTimeout(function () {
+                    Settings.hide();
+                }, Settings.AUTO_HIDE_MS);
+            },
+
+            resetAutoHide() {
+                if (Settings.isVisible) {
+                    Settings.startAutoHide();
+                }
+            },
+
+            onMouseMove() {
+                if (!Settings.isVisible) {
+                    Settings.show();
+                } else {
+                    Settings.resetAutoHide();
+                }
+            },
+
+            // --- Input handlers ---
+
+            onGalaxiesChange() {
+                const raw = parseInt(Settings.elGalaxies.value, 10);
+                const clamped = Settings.clamp(raw, 1, 10);
+                Config.galaxyCount = clamped;
+                Settings.valGalaxies.textContent = clamped;
+                createGalaxies();
+                Settings.saveToStorage();
+                Settings.resetAutoHide();
+            },
+
+            onStarsChange() {
+                const raw = parseInt(Settings.elStars.value, 10);
+                const clamped = Settings.clamp(raw, 50, 500);
+                Config.starsPerGalaxy = clamped;
+                Settings.valStars.textContent = clamped;
+                createGalaxies();
+                Settings.saveToStorage();
+                Settings.resetAutoHide();
+            },
+
+            onSpeedChange() {
+                const raw = parseInt(Settings.elSpeed.value, 10);
+                const clamped = Settings.clamp(raw, 1, 3);
+                Config.speedStep = clamped;
+                Config.speedMultiplier = Settings.SPEED_VALUES[clamped - 1];
+                Settings.valSpeed.textContent = Settings.SPEED_LABELS[clamped - 1];
+                Settings.saveToStorage();
+                Settings.resetAutoHide();
+            },
+
+            onBrightnessChange() {
+                const raw = parseInt(Settings.elBrightness.value, 10);
+                const clamped = Settings.clamp(raw, 20, 60);
+                Config.maxBrightness = clamped;
+                Settings.valBrightness.textContent = clamped + '%';
+                Settings.saveToStorage();
+                Settings.resetAutoHide();
+            },
+
+            onWanderersChange() {
+                Config.showWanderers = Settings.elWanderers.checked;
+                Settings.saveToStorage();
+                Settings.resetAutoHide();
+            },
+
+            syncUIFromConfig() {
+                Settings.elGalaxies.value = Config.galaxyCount;
+                Settings.valGalaxies.textContent = Config.galaxyCount;
+
+                Settings.elStars.value = Config.starsPerGalaxy;
+                Settings.valStars.textContent = Config.starsPerGalaxy;
+
+                Settings.elSpeed.value = Config.speedStep;
+                Settings.valSpeed.textContent = Settings.SPEED_LABELS[Config.speedStep - 1];
+
+                Settings.elBrightness.value = Config.maxBrightness;
+                Settings.valBrightness.textContent = Config.maxBrightness + '%';
+
+                Settings.elWanderers.checked = Config.showWanderers;
+            },
+
+            updateFPSDisplay(fps) {
+                if (Settings.fpsValue !== null) {
+                    Settings.fpsValue.textContent = fps;
+                }
+            },
+
+            // --- localStorage ---
+
+            loadFromStorage() {
+                try {
+                    const raw = localStorage.getItem(Settings.STORAGE_KEY);
+                    if (raw === null) return;
+
+                    const data = JSON.parse(raw);
+                    if (typeof data !== 'object' || data === null) return;
+
+                    if (typeof data.galaxyCount === 'number' && isFinite(data.galaxyCount)) {
+                        Config.galaxyCount = Settings.clamp(Math.round(data.galaxyCount), 1, 10);
+                    }
+                    if (typeof data.starsPerGalaxy === 'number' && isFinite(data.starsPerGalaxy)) {
+                        Config.starsPerGalaxy = Settings.clamp(Math.round(data.starsPerGalaxy), 50, 500);
+                    }
+                    if (typeof data.speedStep === 'number' && isFinite(data.speedStep)) {
+                        Config.speedStep = Settings.clamp(Math.round(data.speedStep), 1, 3);
+                        Config.speedMultiplier = Settings.SPEED_VALUES[Config.speedStep - 1];
+                    }
+                    if (typeof data.maxBrightness === 'number' && isFinite(data.maxBrightness)) {
+                        Config.maxBrightness = Settings.clamp(Math.round(data.maxBrightness), 20, 60);
+                    }
+                    if (typeof data.showWanderers === 'boolean') {
+                        Config.showWanderers = data.showWanderers;
+                    }
+                } catch (_ignored) {}
+            },
+
+            saveToStorage() {
+                try {
+                    const data = {
+                        galaxyCount: Config.galaxyCount,
+                        starsPerGalaxy: Config.starsPerGalaxy,
+                        speedStep: Config.speedStep,
+                        maxBrightness: Config.maxBrightness,
+                        showWanderers: Config.showWanderers
+                    };
+                    localStorage.setItem(Settings.STORAGE_KEY, JSON.stringify(data));
+                } catch (_ignored) {}
+            },
+
+            clamp(value, min, max) {
+                if (!isFinite(value)) return min;
+                return value < min ? min : (value > max ? max : value);
+            }
+        };
+
+        // --- Animation loop ---
+        function animate(timestamp) {
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+
             for (let i = 0; i < galaxies.length; i++) {
-                const galaxy = galaxies[i];
-                const otherGalaxies = galaxies.filter((_, index) => index !== i);
-                galaxy.update(otherGalaxies, wandererStars);
-                galaxy.draw();
+                galaxies[i].update(galaxies, i, wandererStars);
+                galaxies[i].draw();
             }
-            
-            // Update and draw wandering stars
-            for (let i = 0; i < wandererStars.length; i++) {
-                wandererStars[i].update(galaxies);
-                wandererStars[i].draw();
+
+            if (Config.showWanderers) {
+                for (let i = 0; i < wandererStars.length; i++) {
+                    wandererStars[i].update(galaxies);
+                    wandererStars[i].draw();
+                }
             }
-            
+
+            Performance.recordFrame(timestamp);
+
             requestAnimationFrame(animate);
         }
-        
-        animate();
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' || e.key === ' ') {
-                window.close();
-            }
-        });
-        
-        let mouseTimeout;
-        document.addEventListener('mousemove', () => {
-            document.body.style.cursor = 'default';
-            clearTimeout(mouseTimeout);
-            mouseTimeout = setTimeout(() => {
-                document.body.style.cursor = 'none';
-            }, 2000);
-        });
+
+        // --- Init ---
+        Settings.init();
+        createGalaxies();
+        createWanderers();
+        Fullscreen.init();
+        requestAnimationFrame(animate);
     </script>
 </body>
 </html>
