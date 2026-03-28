@@ -9,7 +9,7 @@
  * @module app
  */
 
-import { init as initPostflopAdvisor, onPositionChanged, openPreflopPopup } from './postflop-advisor.js';
+import { init as initPostflopAdvisor, onPositionChanged, onOpponentCountChanged, openPreflopPopup } from './postflop-advisor.js';
 
 // ---------------------------------------------------------------------------
 // Position state -- single source of truth
@@ -17,6 +17,9 @@ import { init as initPostflopAdvisor, onPositionChanged, openPreflopPopup } from
 
 /** @type {string} Current table position. One of "early", "middle", "late", "blinds". */
 let currentPosition = 'blinds';
+
+/** @type {number} Current opponent count from the main-page dropdown (1-9). */
+let currentOpponentCount = 1;
 
 // ---------------------------------------------------------------------------
 // Tool module initialization
@@ -130,6 +133,36 @@ function attachClearAllPositionReset() {
 }
 
 // ---------------------------------------------------------------------------
+// Opponent count selector
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialize the opponent-count dropdown. Queries #opponent-count-select
+ * from the DOM (placed in .position-filters by index.html), attaches a
+ * change listener, and notifies postflop-advisor of the initial value.
+ */
+function initializeOpponentSelector() {
+  const selectEl = /** @type {HTMLSelectElement|null} */ (
+    document.querySelector('#opponent-count-select')
+  );
+  if (!selectEl) {
+    console.warn('app.js: #opponent-count-select not found. Opponent selector not initialized.');
+    return;
+  }
+
+  selectEl.addEventListener('change', () => {
+    const count = parseInt(selectEl.value, 10);
+    if (Number.isFinite(count) && count >= 1) {
+      currentOpponentCount = count;
+      onOpponentCountChanged(count);
+    }
+  });
+
+  // Sync initial value (HTML default is 1)
+  currentOpponentCount = parseInt(selectEl.value, 10) || 1;
+}
+
+// ---------------------------------------------------------------------------
 // Preflop Table popup button
 // ---------------------------------------------------------------------------
 
@@ -146,7 +179,7 @@ function attachPreflopPopupButton() {
   }
 
   preflopBtn.addEventListener('click', () => {
-    openPreflopPopup(currentPosition);
+    openPreflopPopup(currentPosition, currentOpponentCount);
   });
 }
 
@@ -221,6 +254,7 @@ function main() {
   initializeToolModules();
   attachInfoTextListeners();
   initializePositionSelector();
+  initializeOpponentSelector();
   attachClearAllPositionReset();
   attachPreflopPopupButton();
 }

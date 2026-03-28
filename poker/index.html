@@ -21,12 +21,24 @@
         hand chart.
       </p>
 
-      <!-- Position filter buttons -->
+      <!-- Position filter buttons + opponent count selector -->
       <div class="position-filters" role="group" aria-label="Table position filter">
         <button class="position-button position-button--active" data-position="blinds" aria-pressed="true">Blinds (SB/BB)</button>
         <button class="position-button" data-position="early" aria-pressed="false">UTG (Early)</button>
         <button class="position-button" data-position="middle" aria-pressed="false">Middle</button>
         <button class="position-button" data-position="late" aria-pressed="false">Cutoff/BTN</button>
+        <label class="opponent-label" for="opponent-count-select">Opp:</label>
+        <select id="opponent-count-select" class="opponent-select" aria-label="Number of opponents">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+        </select>
       </div>
 
       <div class="postflop-advisor">
@@ -76,9 +88,9 @@
             <!-- 52 card buttons built by postflop-advisor.js -->
           </div>
 
-          <!-- Right-side control panel: opponents, pot, bet (rendered by JS) -->
+          <!-- Right-side control panel: pot, bet (rendered by JS; opponent selector moved to .position-filters) -->
           <div class="advisor-control-panel" aria-label="Betting controls">
-            <!-- Opponent selector + pot/bet inputs + quick buttons rendered by postflop-advisor.js -->
+            <!-- Pot/bet inputs + quick buttons rendered by postflop-advisor.js -->
           </div>
         </div>
 

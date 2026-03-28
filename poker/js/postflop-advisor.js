@@ -23,6 +23,7 @@ import { detectDraws } from './outs-detection.js';
 
 import {
   getHandStrength,
+  getAdjustedStrength,
   STRENGTH_LABELS,
   renderGrid,
   updateCellsForPosition,
@@ -117,8 +118,6 @@ let potInput;
 /** @type {HTMLInputElement} Bet to call input */
 let betInput;
 
-/** @type {HTMLSelectElement} Opponent count dropdown */
-let opponentSelectEl;
 
 
 // -- Suit CSS class mapping --------------------------------------------------
@@ -170,7 +169,6 @@ export function init(containerElement) {
   turnSlotsEl = slotContainers[2];  // "Turn" group
   riverSlotsEl = slotContainers[3]; // "River" group
 
-  // Build control panel first so opponentSelectEl is available
   buildControlPanel();
 
   buildCardSlots();
@@ -351,32 +349,8 @@ const QUICK_AMOUNTS = [1, 10, 100, 1000];
  * and bet input with quick buttons. Renders into .advisor-control-panel.
  */
 function buildControlPanel() {
-  // --- Opponent count group ---
-  const oppGroup = document.createElement('div');
-  oppGroup.className = 'control-panel__group';
-
-  const oppLabel = document.createElement('label');
-  oppLabel.className = 'control-panel__label';
-  oppLabel.textContent = 'Opponents';
-  oppLabel.setAttribute('for', 'opponent-count-select');
-  oppGroup.appendChild(oppLabel);
-
-  opponentSelectEl = document.createElement('select');
-  opponentSelectEl.id = 'opponent-count-select';
-  opponentSelectEl.className = 'opponent-select';
-  for (let i = 1; i <= 9; i++) {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = String(i);
-    if (i === 1) {
-      opt.selected = true;
-    }
-    opponentSelectEl.appendChild(opt);
-  }
-  opponentSelectEl.addEventListener('change', handleOpponentCountChange);
-  oppGroup.appendChild(opponentSelectEl);
-
-  controlPanelEl.appendChild(oppGroup);
+  // Opponent dropdown is now in index.html inside .position-filters,
+  // wired by app.js. This panel only contains pot/bet inputs.
 
   // --- Pot size group ---
   const potGroup = buildInputGroup('Pot', 'advisor-pot-size-input', 'e.g. 100');
@@ -600,14 +574,14 @@ function handleClearAll() {
 }
 
 /**
- * Handle opponent count dropdown change.
- * Updates module state and triggers recalculation.
+ * Called by app.js when the opponent-count dropdown changes.
+ * Stores the new count in module state and triggers equity recalculation
+ * and preflop recommendation update.
+ *
+ * @param {number} count - Number of opponents (1-9)
  */
-function handleOpponentCountChange() {
-  opponentCount = parseInt(opponentSelectEl.value, 10);
-  if (!Number.isFinite(opponentCount) || opponentCount < 1) {
-    opponentCount = 1;
-  }
+export function onOpponentCountChanged(count) {
+  opponentCount = Math.max(1, Math.min(9, Math.round(count || 1)));
   onSelectionChanged();
 }
 
@@ -1645,38 +1619,53 @@ function renderPreflopRecommendation() {
   }
 
   const abbrev = cardsToHandAbbrev(holeCards[0], holeCards[1]);
-  const strength = getHandStrength(abbrev, currentPosition);
+  const strength = getAdjustedStrength(abbrev, currentPosition, opponentCount);
   const positionLabel = POSITION_DISPLAY_NAMES[currentPosition] || currentPosition;
 
   const row = document.createElement('div');
   row.className = 'rec-table__row rec-table__row--preflop';
 
-  // Left side: hand abbreviation and position context
+  // Left side: hand abbreviation, position context, and opponent count
   const nameCell = document.createElement('div');
   nameCell.className = 'rec-table__cell rec-table__cell--name';
-  nameCell.textContent = abbrev + ' from ' + positionLabel;
+  nameCell.textContent = abbrev + ' from ' + positionLabel + ' vs ' + opponentCount;
   row.appendChild(nameCell);
 
-  // Right side: verdict badge (RAISE/CALL/FOLD style)
+  // Right side: verdict badge + reason text
   const verdictCell = document.createElement('div');
   verdictCell.className = 'rec-table__cell rec-table__cell--verdict';
 
   const badge = document.createElement('span');
-  if (strength === 'premium' || strength === 'strong') {
+  let reason = '';
+  if (strength === 'premium') {
     badge.className = 'verdict-badge verdict-raise';
     badge.textContent = 'RAISE';
+    reason = 'Premium hand — raise or re-raise from any position';
+  } else if (strength === 'strong') {
+    badge.className = 'verdict-badge verdict-raise';
+    badge.textContent = 'RAISE';
+    reason = 'Strong hand — open-raise or 3-bet confidently';
   } else if (strength === 'playable') {
     badge.className = 'verdict-badge verdict-call';
     badge.textContent = 'CALL';
+    reason = 'Playable — open or call a raise, fold to heavy action';
   } else if (strength === 'marginal') {
-    badge.className = 'verdict-badge verdict-call';
-    badge.textContent = 'CALL';
+    badge.className = 'verdict-badge verdict-marginal';
+    badge.textContent = 'MAY CALL';
+    reason = 'Marginal — only play if the price is right, fold to raises';
   } else {
     badge.className = 'verdict-badge verdict-fold';
     badge.textContent = 'FOLD';
+    reason = 'Too weak for this spot — wait for a better hand';
   }
   verdictCell.appendChild(badge);
   row.appendChild(verdictCell);
+
+  // Reason text below the name/verdict row
+  const reasonCell = document.createElement('div');
+  reasonCell.className = 'rec-table__cell rec-table__cell--reason';
+  reasonCell.textContent = reason;
+  row.appendChild(reasonCell);
 
   // Wrap in .rec-table so the row gets the enclosing border/background styling
   const table = document.createElement('div');
@@ -1709,9 +1698,13 @@ let popupFocusTrapHandler = null;
  * the 13x13 grid using preflop-chart.js exports, and sets up
  * focus trapping and close handlers.
  *
+ * The popup maintains its own local opponent count (initialized from
+ * mainPageOpponentCount) that is never written back to module state.
+ *
  * @param {string} position - Current position to display the grid for
+ * @param {number} [mainPageOpponentCount] - Opponent count from the main page (default 1)
  */
-export function openPreflopPopup(position) {
+export function openPreflopPopup(position, mainPageOpponentCount) {
   const overlay = document.querySelector('.preflop-popup-overlay');
   if (!overlay) {
     console.error('postflop-advisor: .preflop-popup-overlay not found.');
@@ -1722,6 +1715,10 @@ export function openPreflopPopup(position) {
   if (overlay.style.display === 'flex') {
     closePreflopPopup();
   }
+
+  // Local popup state -- isolated from module-level opponentCount
+  let popupOpponentCount = mainPageOpponentCount || 1;
+  let currentPopupPosition = position;
 
   // Clear any previous popup content
   while (overlay.firstChild) {
@@ -1751,7 +1748,7 @@ export function openPreflopPopup(position) {
 
   popup.appendChild(header);
 
-  // -- Position filter buttons inside popup --
+  // -- Position filter buttons + opponent dropdown inside popup --
   const popupFilters = document.createElement('div');
   popupFilters.className = 'position-filters position-filters--popup';
   popupFilters.setAttribute('role', 'group');
@@ -1781,11 +1778,39 @@ export function openPreflopPopup(position) {
       }
       btn.classList.add('position-button--active');
 
-      // Re-render grid for new position
-      updateCellsForPosition(popupGridCells, pos.value);
+      // Track the popup's current position for opponent-count changes
+      currentPopupPosition = pos.value;
+
+      // Re-render grid for new position with popup's local opponent count
+      updateCellsForPosition(popupGridCells, pos.value, popupOpponentCount);
     });
     popupFilters.appendChild(btn);
   }
+
+  // -- Opponent dropdown local to the popup --
+  const popupOppLabel = document.createElement('label');
+  popupOppLabel.className = 'opponent-label';
+  popupOppLabel.textContent = 'Opp:';
+  popupFilters.appendChild(popupOppLabel);
+
+  const popupOppSelect = document.createElement('select');
+  popupOppSelect.className = 'opponent-select';
+  popupOppSelect.setAttribute('aria-label', 'Number of opponents (popup)');
+  for (let i = 1; i <= 9; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = String(i);
+    if (i === popupOpponentCount) {
+      opt.selected = true;
+    }
+    popupOppSelect.appendChild(opt);
+  }
+  popupOppSelect.addEventListener('change', function () {
+    popupOpponentCount = parseInt(popupOppSelect.value, 10) || 1;
+    updateCellsForPosition(popupGridCells, currentPopupPosition, popupOpponentCount);
+  });
+  popupFilters.appendChild(popupOppSelect);
+
   popup.appendChild(popupFilters);
 
   // -- Legend --
@@ -1815,9 +1840,9 @@ export function openPreflopPopup(position) {
 
   overlay.appendChild(popup);
 
-  // Render the grid using preflop-chart.js exports
-  popupGridCells = renderGrid(gridContainer, position);
-  updateCellsForPosition(popupGridCells, position);
+  // Render the grid using preflop-chart.js exports, with popup's local opponent count
+  popupGridCells = renderGrid(gridContainer, position, popupOpponentCount);
+  updateCellsForPosition(popupGridCells, position, popupOpponentCount);
   attachGridClickHandler(gridContainer, detailEl, popupGridCells);
 
   // Show the overlay

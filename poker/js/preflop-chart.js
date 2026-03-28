@@ -5,9 +5,10 @@
  * click handling. All rendering functions accept container elements as
  * parameters so they can be used in any context (popup, inline, etc.).
  *
- * Exports: getHandStrength, STRENGTH_LABELS, renderGrid,
- * updateCellsForPosition, attachGridClickHandler, handNameForCell,
- * fullHandNameForCell.
+ * Exports: getHandStrength, getAdjustedStrength, STRENGTH_LABELS,
+ * renderGrid, updateCellsForPosition, attachGridClickHandler,
+ * handNameForCell, fullHandNameForCell, isSuitedConnector,
+ * isPocketPair, isOffsuitBroadway.
  *
  * @module preflop-chart
  */
@@ -79,123 +80,266 @@ export function fullHandNameForCell(row, col) {
   }
 }
 
-// ── TAG range data ───────────────────────────────────────────────────
+// ── Strength categories and master ranking ──────────────────────────
 //
-// Simplified tight-aggressive (TAG) ranges for each position.
-// Each position maps a set of hand abbreviations to a strength category.
+// Every hand has a numeric rank (1=best, 169=worst). Category boundaries
+// slide based on position and opponent count. No hand is ever "unlisted."
 //
 // Strength categories:
 //   "premium"  -- Always raise/re-raise (AA, KK, QQ, AKs, etc.)
 //   "strong"   -- Raise from most positions
 //   "playable" -- Open/call from wider positions
 //   "marginal" -- Only in late position or blinds
-//   "fold"     -- Default: not listed means fold
-//
-// These ranges are beginner-friendly approximations, NOT GTO solutions.
-// They are intentionally conservative (tight).
+//   "fold"     -- Rank exceeds the marginal cutoff
 
 /** @typedef {'premium'|'strong'|'playable'|'marginal'|'fold'} StrengthCategory */
 
 /**
- * Master range data. For the "all" filter we show inherent hand strength
- * (strongest category across all positions). For position filters we
- * show whether the hand is playable at that position.
+ * Master ranking of all 169 starting hands, ordered by equity/playability.
+ * Rank 1 = strongest (AA), rank 169 = weakest (72o).
+ * Derived from full-ring equity analysis, cross-referenced across multiple sources.
  *
- * Structure: each position has a Map<handAbbrev, StrengthCategory>.
- * "all" uses the best category for each hand across all positions.
- *
- * @type {Record<string, Map<string, StrengthCategory>>}
+ * @type {Map<string, number>}
  */
-const POSITION_RANGES = buildPositionRanges();
+const HAND_RANKINGS = new Map([
+  ['AA',   1], ['KK',   2], ['QQ',   3], ['AKs',  4], ['JJ',   5],
+  ['AQs',  6], ['KQs',  7], ['AJs',  8], ['KJs',  9], ['TT',  10],
+  ['AKo', 11], ['ATs', 12], ['QJs', 13], ['KTs', 14], ['QTs', 15],
+  ['JTs', 16], ['99',  17], ['AQo', 18], ['A9s', 19], ['KQo', 20],
+  ['88',  21], ['K9s', 22], ['T9s', 23], ['A8s', 24], ['Q9s', 25],
+  ['J9s', 26], ['AJo', 27], ['A5s', 28], ['77',  29], ['A7s', 30],
+  ['KJo', 31], ['A4s', 32], ['A3s', 33], ['A6s', 34], ['QJo', 35],
+  ['66',  36], ['K8s', 37], ['T8s', 38], ['A2s', 39], ['98s', 40],
+  ['J8s', 41], ['ATo', 42], ['Q8s', 43], ['K7s', 44], ['KTo', 45],
+  ['55',  46], ['JTo', 47], ['87s', 48], ['QTo', 49], ['44',  50],
+  ['33',  51], ['22',  52], ['K6s', 53], ['97s', 54], ['K5s', 55],
+  ['76s', 56], ['T7s', 57], ['K4s', 58], ['K3s', 59], ['K2s', 60],
+  ['Q7s', 61], ['86s', 62], ['65s', 63], ['J7s', 64], ['54s', 65],
+  ['Q6s', 66], ['75s', 67], ['96s', 68], ['Q5s', 69], ['64s', 70],
+  ['Q4s', 71], ['Q3s', 72], ['T9o', 73], ['T6s', 74], ['Q2s', 75],
+  ['A9o', 76], ['53s', 77], ['85s', 78], ['J6s', 79], ['J9o', 80],
+  ['K9o', 81], ['J5s', 82], ['Q9o', 83], ['43s', 84], ['74s', 85],
+  ['J4s', 86], ['J3s', 87], ['95s', 88], ['J2s', 89], ['63s', 90],
+  ['A8o', 91], ['52s', 92], ['T5s', 93], ['84s', 94], ['T4s', 95],
+  ['T3s', 96], ['42s', 97], ['T2s', 98], ['98o', 99], ['T8o',100],
+  ['A5o',101], ['A7o',102], ['73s',103], ['A4o',104], ['32s',105],
+  ['94s',106], ['93s',107], ['J8o',108], ['A3o',109], ['62s',110],
+  ['92s',111], ['K8o',112], ['A6o',113], ['87o',114], ['Q8o',115],
+  ['83s',116], ['A2o',117], ['82s',118], ['97o',119], ['72s',120],
+  ['76o',121], ['K7o',122], ['65o',123], ['T7o',124], ['K6o',125],
+  ['86o',126], ['54o',127], ['K5o',128], ['J7o',129], ['75o',130],
+  ['Q7o',131], ['K4o',132], ['K3o',133], ['96o',134], ['K2o',135],
+  ['64o',136], ['Q6o',137], ['53o',138], ['85o',139], ['T6o',140],
+  ['Q5o',141], ['43o',142], ['Q4o',143], ['Q3o',144], ['74o',145],
+  ['Q2o',146], ['J6o',147], ['63o',148], ['J5o',149], ['95o',150],
+  ['52o',151], ['J4o',152], ['J3o',153], ['42o',154], ['J2o',155],
+  ['84o',156], ['T5o',157], ['T4o',158], ['32o',159], ['T3o',160],
+  ['73o',161], ['T2o',162], ['62o',163], ['94o',164], ['93o',165],
+  ['92o',166], ['83o',167], ['82o',168], ['72o',169],
+]);
 
 /**
- * Build the position range maps from compact string definitions.
- * This keeps the data readable and minimizes repetition.
+ * Category cutoff thresholds indexed by [position][opponentCount].
+ * Each entry is [P, S, L, M] where:
+ *   ranks 1..P    = premium
+ *   ranks P+1..S  = strong
+ *   ranks S+1..L  = playable
+ *   ranks L+1..M  = marginal
+ *   ranks M+1..169 = fold
  *
- * @returns {Record<string, Map<string, StrengthCategory>>}
+ * @type {Record<string, Record<number, [number, number, number, number]>>}
  */
-function buildPositionRanges() {
-  // Compact range definitions per position.
-  // Each category is a space-separated list of hand abbreviations.
+const CATEGORY_CUTOFFS = {
+  // Position merging by opponent count (fewer opponents = fewer distinct seats):
+  //   1 opp:  all positions identical (heads-up, position irrelevant)
+  //   2 opp:  early=middle=late (just "BTN" vs blinds)
+  //   3 opp:  early=middle (UTG/Middle merge), late and blinds separate
+  //   4 opp:  all 4 positions distinct (BTN=Cutoff already same as "late")
+  //   5+ opp: all 4 positions distinct (full table)
+  early: {
+    1: [10, 24, 56,130],  // = all positions (heads-up)
+    2: [ 9, 22, 48,100],  // = late (just BTN vs blinds)
+    3: [ 5, 12, 20, 32],  // = middle (UTG/Middle merge)
+    4: [ 4,  8, 12, 16],
+    5: [ 4,  7, 11, 15],
+    6: [ 4,  6, 10, 14],
+    7: [ 4,  6,  9, 13],
+    8: [ 4,  5,  9, 12],
+    9: [ 4,  5,  8, 11],
+  },
+  middle: {
+    1: [10, 24, 56,130],  // = all positions (heads-up)
+    2: [ 9, 22, 48,100],  // = late (just BTN vs blinds)
+    3: [ 5, 12, 20, 32],  // UTG/Middle merged
+    4: [ 5, 10, 16, 23],
+    5: [ 5,  9, 15, 21],
+    6: [ 4,  8, 14, 20],
+    7: [ 4,  7, 12, 18],
+    8: [ 4,  7, 11, 16],
+    9: [ 4,  6, 10, 15],
+  },
+  late: {
+    1: [10, 24, 56,130],  // = all positions (heads-up)
+    2: [ 9, 22, 48,100],  // BTN group (early=middle=late)
+    3: [ 7, 16, 32, 52],
+    4: [ 6, 12, 24, 40],
+    5: [ 6, 11, 22, 38],
+    6: [ 5, 10, 20, 36],
+    7: [ 5,  9, 18, 34],
+    8: [ 4,  8, 16, 30],
+    9: [ 4,  7, 14, 26],
+  },
+  blinds: {
+    1: [10, 24, 56,130],  // = all positions (heads-up)
+    2: [ 7, 18, 38, 74],  // blinds stays separate at 2 opp
+    3: [ 5, 12, 22, 36],
+    4: [ 5, 10, 18, 26],
+    5: [ 5,  9, 16, 24],
+    6: [ 4,  8, 14, 22],
+    7: [ 4,  7, 13, 20],
+    8: [ 4,  7, 12, 18],
+    9: [ 4,  6, 11, 16],
+  },
+};
 
-  /** @type {Record<string, Record<StrengthCategory, string>>} */
-  const rawRanges = {
-    early: {
-      premium:  'AA KK QQ AKs',
-      strong:   'JJ TT AKo AQs',
-      playable: '99 AJs AQo KQs',
-      marginal: '88 ATs KJs QJs',
-      fold:     '',
-    },
-    middle: {
-      premium:  'AA KK QQ AKs',
-      strong:   'JJ TT AKo AQs AJs',
-      playable: '99 88 AQo ATs KQs KJs QJs',
-      marginal: '77 A9s KTs QTs JTs T9s',
-      fold:     '',
-    },
-    late: {
-      premium:  'AA KK QQ AKs',
-      strong:   'JJ TT AKo AQs AJs ATs',
-      playable: '99 88 77 AQo AJo KQs KJs KTs QJs QTs JTs',
-      marginal: '66 55 A9s A8s A7s A6s A5s A4s A3s A2s KQo KJo QJo T9s 98s 87s 76s 65s',
-      fold:     '',
-    },
-    blinds: {
-      premium:  'AA KK QQ AKs',
-      strong:   'JJ TT AKo AQs AJs',
-      playable: '99 88 AQo ATs KQs KJs QJs JTs',
-      marginal: '77 66 A9s A8s KTs QTs T9s 98s 87s',
-      fold:     '',
-    },
-  };
+// Ordered from strongest to weakest for "all" position comparison
+const STRENGTH_ORDER = ['premium', 'strong', 'playable', 'marginal', 'fold'];
 
-  /** @type {Record<string, Map<string, StrengthCategory>>} */
-  const result = {};
-
-  // Build per-position maps
-  for (const [position, categories] of Object.entries(rawRanges)) {
-    const map = new Map();
-    for (const [category, hands] of Object.entries(categories)) {
-      if (!hands) continue;
-      for (const hand of hands.split(/\s+/)) {
-        if (hand) {
-          map.set(hand, /** @type {StrengthCategory} */ (category));
-        }
-      }
-    }
-    result[position] = map;
-  }
-
-  // Build the "all" map: take the best (strongest) category across positions
-  const strengthOrder = ['premium', 'strong', 'playable', 'marginal'];
-  const allMap = new Map();
-
-  for (const posMap of Object.values(result)) {
-    for (const [hand, category] of posMap) {
-      const existing = allMap.get(hand);
-      if (!existing || strengthOrder.indexOf(category) < strengthOrder.indexOf(existing)) {
-        allMap.set(hand, category);
-      }
-    }
-  }
-
-  result['all'] = allMap;
-
-  return result;
+/**
+ * Compare a hand's rank against four cutoff thresholds and return the category.
+ *
+ * @param {number} rank - The hand's rank (1-169)
+ * @param {[number, number, number, number]} cutoffs - [P, S, L, M] thresholds
+ * @returns {StrengthCategory}
+ */
+function rankToCategory(rank, cutoffs) {
+  const [P, S, L, M] = cutoffs;
+  if (rank <= P) return 'premium';
+  if (rank <= S) return 'strong';
+  if (rank <= L) return 'playable';
+  if (rank <= M) return 'marginal';
+  return 'fold';
 }
 
 /**
  * Look up the strength category of a hand for a given position.
+ * Uses the base cutoffs (opponent count = 4).
+ * For "all" position: returns the strongest category across all four positions.
  *
  * @param {string} handAbbrev - E.g. "AKs", "TT", "72o"
  * @param {string} position - One of "all", "early", "middle", "late", "blinds"
  * @returns {StrengthCategory}
  */
 export function getHandStrength(handAbbrev, position) {
-  const rangeMap = POSITION_RANGES[position];
-  if (!rangeMap) return 'fold';
-  return rangeMap.get(handAbbrev) || 'fold';
+  const rank = HAND_RANKINGS.get(handAbbrev);
+  if (rank === undefined) return 'fold';
+
+  // "all" position: strongest category across all four positions at base cutoffs (opp=4)
+  if (position === 'all') {
+    let best = /** @type {StrengthCategory} */ ('fold');
+    for (const pos of ['early', 'middle', 'late', 'blinds']) {
+      const cat = rankToCategory(rank, CATEGORY_CUTOFFS[pos][4]);
+      if (STRENGTH_ORDER.indexOf(cat) < STRENGTH_ORDER.indexOf(best)) {
+        best = cat;
+      }
+    }
+    return best;
+  }
+
+  const positionCutoffs = CATEGORY_CUTOFFS[position];
+  if (!positionCutoffs) return 'fold';
+
+  return rankToCategory(rank, positionCutoffs[4]);
+}
+
+// ── Hand-type classification ────────────────────────────────────────
+//
+// Pure predicates exported for backward compatibility. No longer called
+// by internal algorithm logic (the ranking/cutoff system replaces the
+// shift-resistance rules), but kept as public API.
+
+/**
+ * Returns true if the hand is a suited connector (adjacent ranks with 's' suffix).
+ * Adjacent means a rank-index gap of exactly 1. Ace is high-only for this check,
+ * so A2s is NOT a connector and AKs IS (gap = 12 - 11 = 1).
+ *
+ * @param {string} handAbbrev - E.g. "T9s", "87s", "AKs", "A2s"
+ * @returns {boolean}
+ */
+export function isSuitedConnector(handAbbrev) {
+  if (!handAbbrev || handAbbrev.length !== 3 || handAbbrev[2] !== 's') {
+    return false;
+  }
+  const highIdx = RANK_NAMES.indexOf(handAbbrev[0]);
+  const lowIdx = RANK_NAMES.indexOf(handAbbrev[1]);
+  if (highIdx === -1 || lowIdx === -1) return false;
+  return Math.abs(highIdx - lowIdx) === 1;
+}
+
+/**
+ * Returns true if the hand is a pocket pair (two identical rank chars, no suffix).
+ *
+ * @param {string} handAbbrev - E.g. "AA", "55", "22"
+ * @returns {boolean}
+ */
+export function isPocketPair(handAbbrev) {
+  return (
+    !!handAbbrev &&
+    handAbbrev.length === 2 &&
+    handAbbrev[0] === handAbbrev[1] &&
+    RANK_NAMES.indexOf(handAbbrev[0]) !== -1
+  );
+}
+
+/**
+ * Returns true if the hand is an offsuit broadway (both ranks >= T, 'o' suffix).
+ * Broadway ranks: T (index 8), J (9), Q (10), K (11), A (12).
+ *
+ * @param {string} handAbbrev - E.g. "AKo", "KJo", "QTo"
+ * @returns {boolean}
+ */
+export function isOffsuitBroadway(handAbbrev) {
+  if (!handAbbrev || handAbbrev.length !== 3 || handAbbrev[2] !== 'o') {
+    return false;
+  }
+  const highIdx = RANK_NAMES.indexOf(handAbbrev[0]);
+  const lowIdx = RANK_NAMES.indexOf(handAbbrev[1]);
+  if (highIdx === -1 || lowIdx === -1) return false;
+  // Broadway threshold: rank index >= 8 (Ten or higher)
+  return highIdx >= 8 && lowIdx >= 8;
+}
+
+// ── Opponent-count adjusted lookup ──────────────────────────────────
+
+/**
+ * Return the opponent-count-adjusted strength category for a hand.
+ *
+ * Looks up the hand's rank from HAND_RANKINGS, then resolves the category
+ * using the cutoff thresholds for the given (position, opponentCount) pair.
+ * Two lookups and four comparisons -- no chain walking or fallback passes.
+ *
+ * The "all" position bypasses opponent adjustment and returns the raw
+ * best-across-positions lookup (strongest category at base cutoffs).
+ *
+ * @param {string} handAbbrev - E.g. "AKs", "T9s", "KJo"
+ * @param {string} position - One of "all", "early", "middle", "late", "blinds"
+ * @param {number} opponentCount - Number of opponents (1-9)
+ * @returns {StrengthCategory}
+ */
+export function getAdjustedStrength(handAbbrev, position, opponentCount) {
+  // "all" position: best-across-positions at base cutoffs, no opponent adjustment
+  if (position === 'all') return getHandStrength(handAbbrev, 'all');
+
+  const rank = HAND_RANKINGS.get(handAbbrev);
+  if (rank === undefined) return 'fold';
+
+  const positionCutoffs = CATEGORY_CUTOFFS[position];
+  if (!positionCutoffs) return 'fold';
+
+  // Clamp opponent count to valid range
+  const opp = Math.max(1, Math.min(9, Math.round(opponentCount || 1)));
+
+  return rankToCategory(rank, positionCutoffs[opp]);
 }
 
 // ── Non-color text indicators ────────────────────────────────────────
@@ -228,11 +372,14 @@ export const STRENGTH_LABELS = {
  * @param {number} row
  * @param {number} col
  * @param {string} position - Current position filter
+ * @param {number} [opponentCount] - When provided and > 0, uses adjusted strength
  * @returns {HTMLButtonElement}
  */
-function createGridCell(row, col, position) {
+function createGridCell(row, col, position, opponentCount) {
   const abbrev = handNameForCell(row, col);
-  const strength = getHandStrength(abbrev, position);
+  const strength = opponentCount
+    ? getAdjustedStrength(abbrev, position, opponentCount)
+    : getHandStrength(abbrev, position);
 
   const button = document.createElement('button');
   button.type = 'button';
@@ -278,9 +425,10 @@ function createGridCell(row, col, position) {
  *
  * @param {HTMLElement} gridContainer - Any element to render the grid into
  * @param {string} [position='all'] - Initial position filter
+ * @param {number} [opponentCount] - When provided and > 0, uses adjusted strength
  * @returns {HTMLButtonElement[]} Flat array of all 169 cells, row-major order
  */
-export function renderGrid(gridContainer, position) {
+export function renderGrid(gridContainer, position, opponentCount) {
   const pos = position || 'all';
   const cells = [];
 
@@ -291,7 +439,7 @@ export function renderGrid(gridContainer, position) {
     rowDiv.style.display = 'contents';
 
     for (let col = 0; col < GRID_SIZE; col++) {
-      const cell = createGridCell(row, col, pos);
+      const cell = createGridCell(row, col, pos, opponentCount);
       rowDiv.appendChild(cell);
       cells.push(cell);
     }
@@ -309,8 +457,9 @@ export function renderGrid(gridContainer, position) {
  *
  * @param {HTMLButtonElement[]} cells - All 169 grid cells
  * @param {string} position - New position filter
+ * @param {number} [opponentCount] - When provided and > 0, uses adjusted strength
  */
-export function updateCellsForPosition(cells, position) {
+export function updateCellsForPosition(cells, position, opponentCount) {
   const strengthClasses = [
     'grid-cell--premium',
     'grid-cell--strong',
@@ -324,7 +473,9 @@ export function updateCellsForPosition(cells, position) {
     const abbrev = cell.dataset.hand;
     if (!abbrev) continue;
 
-    const strength = getHandStrength(abbrev, position);
+    const strength = opponentCount
+      ? getAdjustedStrength(abbrev, position, opponentCount)
+      : getHandStrength(abbrev, position);
     cell.dataset.strength = strength;
 
     // Remove all strength classes at once, then add the correct one
