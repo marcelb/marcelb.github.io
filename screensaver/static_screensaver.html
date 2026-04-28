@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TV Static Screensaver</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    #canvas {
+      display: block;
+    }
+
+    /* --- Settings overlay --- */
+    #settings-overlay {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 260px;
+      padding: 16px 18px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      color: #888888;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #settings-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #settings-overlay .settings-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #666666;
+      margin-bottom: 12px;
+    }
+
+    #settings-overlay .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    #settings-overlay .setting-row label {
+      flex: 0 0 auto;
+      margin-right: 10px;
+      color: #888888;
+    }
+
+    #settings-overlay .setting-row .setting-value {
+      width: 48px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #777777;
+      font-size: 12px;
+    }
+
+    #settings-overlay input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1 1 auto;
+      height: 4px;
+      background: #333333;
+      border-radius: 2px;
+      outline: none;
+      margin: 0 8px;
+      cursor: pointer;
+    }
+
+    #settings-overlay input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555555;
+      cursor: pointer;
+    }
+
+    #settings-overlay input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #555555;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="settings-overlay">
+    <div class="settings-title">Settings</div>
+
+    <div class="setting-row">
+      <label for="setting-brightness">Brightness</label>
+      <input type="range" id="setting-brightness" min="20" max="100" step="1" value="70">
+      <span class="setting-value" id="val-brightness">70%</span>
+    </div>
+
+    <div class="setting-row">
+      <label for="setting-speed">Speed</label>
+      <input type="range" id="setting-speed" min="1" max="3" step="1" value="3">
+      <span class="setting-value" id="val-speed">Fast</span>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const Config = {
+      brightness: 70,
+      speed: 3,
+      // Offscreen buffer is rendered at 1/PIXEL_SCALE of canvas size and stretched
+      // up with smoothing disabled — gives chunkier "CRT" grains and keeps per-frame
+      // pixel work small enough to stay smooth at 60 Hz on 4K displays.
+      PIXEL_SCALE: 2
+    };
+
+    // Maps the 1-3 speed setting to the number of rAF ticks between noise updates.
+    // Slow refreshes ~15 Hz, Medium ~30 Hz, Fast every frame.
+    const SPEED_FRAME_INTERVAL = { 1: 4, 2: 2, 3: 1 };
+    const SPEED_LABELS = ['Slow', 'Medium', 'Fast'];
+
+    const Renderer = {
+      canvas: null,
+      ctx: null,
+      offscreen: null,
+      offCtx: null,
+      imageData: null,
+      buf: null,
+      width: 0,
+      height: 0,
+      bufW: 0,
+      bufH: 0,
+      frameCounter: 0,
+      resizeTimeoutId: 0,
+
+      init() {
+        Renderer.canvas = document.getElementById('canvas');
+        Renderer.ctx = Renderer.canvas.getContext('2d', { alpha: false });
+        Renderer.offscreen = document.createElement('canvas');
+        Renderer.offCtx = Renderer.offscreen.getContext('2d', { alpha: false });
+        Renderer.sizeCanvas();
+      },
+
+      sizeCanvas() {
+        Renderer.width = window.innerWidth;
+        Renderer.height = window.innerHeight;
+        Renderer.canvas.width = Renderer.width;
+        Renderer.canvas.height = Renderer.height;
+
+        // Stretching small -> large with smoothing off gives the chunky CRT look
+        Renderer.ctx.imageSmoothingEnabled = false;
+
+        Renderer.bufW = Math.max(1, Math.floor(Renderer.width / Config.PIXEL_SCALE));
+        Renderer.bufH = Math.max(1, Math.floor(Renderer.height / Config.PIXEL_SCALE));
+        Renderer.offscreen.width = Renderer.bufW;
+        Renderer.offscreen.height = Renderer.bufH;
+        Renderer.imageData = Renderer.offCtx.createImageData(Renderer.bufW, Renderer.bufH);
+        Renderer.buf = Renderer.imageData.data;
+
+        // Alpha is constant — write it once so the per-frame loop can skip it
+        const data = Renderer.buf;
+        for (let i = 3; i < data.length; i += 4) data[i] = 255;
+      },
+
+      handleResize() {
+        clearTimeout(Renderer.resizeTimeoutId);
+        Renderer.resizeTimeoutId = setTimeout(Renderer.sizeCanvas, 100);
+      },
+
+      resizeImmediate() {
+        clearTimeout(Renderer.resizeTimeoutId);
+        Renderer.sizeCanvas();
+      },
+
+      start() {
+        requestAnimationFrame(Renderer.frame);
+      },
+
+      frame() {
+        Renderer.frameCounter++;
+        const interval = SPEED_FRAME_INTERVAL[Config.speed] || 1;
+
+        if (Renderer.frameCounter % interval === 0) {
+          Renderer.renderNoise();
+        }
+
+        // Always blit — keeps the last noise frame visible while paused on slow speeds
+        Renderer.ctx.drawImage(
+          Renderer.offscreen,
+          0, 0, Renderer.bufW, Renderer.bufH,
+          0, 0, Renderer.width, Renderer.height
+        );
+
+        requestAnimationFrame(Renderer.frame);
+      },
+
+      renderNoise() {
+        const data = Renderer.buf;
+        const len = data.length;
+        // Brightness caps the gray value: at 100% noise reaches full white,
+        // at 20% the brightest grain is only ~51 (dim TV).
+        const cap = (Config.brightness / 100) * 256;
+
+        for (let i = 0; i < len; i += 4) {
+          const g = (Math.random() * cap) | 0;
+          data[i] = g;
+          data[i + 1] = g;
+          data[i + 2] = g;
+        }
+
+        Renderer.offCtx.putImageData(Renderer.imageData, 0, 0);
+      }
+    };
+
+    const Fullscreen = {
+      init() {
+        Renderer.canvas.addEventListener('click', Fullscreen.requestFullscreen);
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            Fullscreen.requestFullscreen();
+          }
+        });
+
+        document.addEventListener('fullscreenchange', Renderer.resizeImmediate);
+        document.addEventListener('webkitfullscreenchange', Renderer.resizeImmediate);
+      },
+
+      requestFullscreen() {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(function () {});
+        } else if (el.webkitRequestFullscreen) {
+          try { el.webkitRequestFullscreen(); } catch (_ignored) {}
+        }
+      }
+    };
+
+    const Settings = {
+      STORAGE_KEY: 'tv-static-screensaver-settings',
+      AUTO_HIDE_MS: 5000,
+
+      overlay: null,
+      hideTimerId: 0,
+      isVisible: false,
+
+      elBrightness: null,
+      elSpeed: null,
+      valBrightness: null,
+      valSpeed: null,
+
+      init() {
+        Settings.overlay = document.getElementById('settings-overlay');
+        Settings.elBrightness = document.getElementById('setting-brightness');
+        Settings.elSpeed = document.getElementById('setting-speed');
+        Settings.valBrightness = document.getElementById('val-brightness');
+        Settings.valSpeed = document.getElementById('val-speed');
+
+        Settings.loadFromStorage();
+        Settings.syncUIFromConfig();
+
+        Settings.elBrightness.addEventListener('input', Settings.onBrightnessChange);
+        Settings.elSpeed.addEventListener('input', Settings.onSpeedChange);
+
+        document.addEventListener('mousemove', Settings.onMouseMove, { passive: true });
+        Settings.overlay.addEventListener('mousemove', Settings.resetAutoHide, { passive: true });
+        Settings.overlay.addEventListener('input', Settings.resetAutoHide, { passive: true });
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 's' || e.key === 'S') {
+            if (Settings.isVisible) Settings.hide();
+            else Settings.show();
+          }
+        });
+      },
+
+      show() {
+        Settings.isVisible = true;
+        Settings.overlay.classList.add('visible');
+        Settings.startAutoHide();
+      },
+
+      hide() {
+        Settings.isVisible = false;
+        Settings.overlay.classList.remove('visible');
+        clearTimeout(Settings.hideTimerId);
+        Settings.hideTimerId = 0;
+      },
+
+      startAutoHide() {
+        clearTimeout(Settings.hideTimerId);
+        Settings.hideTimerId = setTimeout(Settings.hide, Settings.AUTO_HIDE_MS);
+      },
+
+      resetAutoHide() {
+        if (Settings.isVisible) Settings.startAutoHide();
+      },
+
+      onMouseMove() {
+        if (!Settings.isVisible) Settings.show();
+        else Settings.resetAutoHide();
+      },
+
+      onBrightnessChange() {
+        const raw = parseInt(Settings.elBrightness.value, 10);
+        const clamped = Settings.clamp(raw, 20, 100);
+        Config.brightness = clamped;
+        Settings.valBrightness.textContent = clamped + '%';
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      onSpeedChange() {
+        const raw = parseInt(Settings.elSpeed.value, 10);
+        const clamped = Settings.clamp(raw, 1, 3);
+        Config.speed = clamped;
+        Settings.valSpeed.textContent = SPEED_LABELS[clamped - 1];
+        Settings.saveToStorage();
+        Settings.resetAutoHide();
+      },
+
+      syncUIFromConfig() {
+        Settings.elBrightness.value = Config.brightness;
+        Settings.valBrightness.textContent = Config.brightness + '%';
+        Settings.elSpeed.value = Config.speed;
+        Settings.valSpeed.textContent = SPEED_LABELS[Config.speed - 1];
+      },
+
+      loadFromStorage() {
+        try {
+          const raw = localStorage.getItem(Settings.STORAGE_KEY);
+          if (raw === null) return;
+          const data = JSON.parse(raw);
+          if (typeof data !== 'object' || data === null) return;
+
+          if (typeof data.brightness === 'number' && isFinite(data.brightness)) {
+            Config.brightness = Settings.clamp(Math.round(data.brightness), 20, 100);
+          }
+          if (typeof data.speed === 'number' && isFinite(data.speed)) {
+            Config.speed = Settings.clamp(Math.round(data.speed), 1, 3);
+          }
+        } catch (_ignored) {}
+      },
+
+      saveToStorage() {
+        try {
+          localStorage.setItem(Settings.STORAGE_KEY, JSON.stringify({
+            brightness: Config.brightness,
+            speed: Config.speed
+          }));
+        } catch (_ignored) {}
+      },
+
+      clamp(value, min, max) {
+        if (!isFinite(value)) return min;
+        return value < min ? min : (value > max ? max : value);
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+      Settings.init();
+      Renderer.init();
+      window.addEventListener('resize', Renderer.handleResize, { passive: true });
+      Fullscreen.init();
+      Renderer.start();
+    });
+  </script>
+</body>
+</html>
